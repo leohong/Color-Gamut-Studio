@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Gamut Studio v2.0 - 專業色域與雙螢幕色彩對齊工具箱</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                            950: '#040711',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- KaTeX for formula rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            background-color: #040711;
+            color: #f1f5f9;
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, h4, .font-title {
+            font-family: 'Outfit', sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #080c18;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0ea5e9;
+        }
+
+        /* Glassmorphism style cards */
+        .glass-card {
+            background: rgba(13, 20, 38, 0.45);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glass-card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card-hover:hover {
+            border-color: rgba(14, 165, 233, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(14, 165, 233, 0.05);
+            transform: translateY(-2px);
+        }
+
+        /* Custom inputs */
+        input[type="number"] {
+            background-color: #090d16;
+            border: 1px solid #1e293b;
+            color: #ffffff;
+            padding: 5px 8px;
+            border-radius: 6px;
+            width: 80px;
+            font-family: monospace;
+            font-size: 13px;
+            text-align: right;
+            transition: all 0.2s ease;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+        }
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
+
+        input[type="number"].highlight-input {
+            background-color: rgba(14, 165, 233, 0.15);
+            border-color: #0ea5e9;
+        }
+
+        .color-label {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        /* Checkbox styling */
+        .gamut-checkbox {
+            appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.25rem;
+            border: 1px solid #334155;
+            background-color: #090d16;
+            display: inline-grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .gamut-checkbox::before {
+            content: "";
+            width: 0.65em;
+            height: 0.65em;
+            transform: scale(0);
+            transition: 100ms transform ease-in-out;
+            box-shadow: inset 1em 1em var(--chk-color, #fff);
+            background-color: transform;
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+        .gamut-checkbox:checked {
+            border-color: var(--chk-color, #0ea5e9);
+        }
+        .gamut-checkbox:checked::before {
+            transform: scale(1);
+        }
+
+        /* Matrix Display styling */
+        .matrix-cell {
+            background: #060912;
+            padding: 6px 4px;
+            border-radius: 6px;
+            min-width: 85px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 13px;
+            border: 1px solid #111827;
+            color: #cbd5e1;
+        }
+
+        /* Radio Toggle Switch */
+        .space-radio:checked + label {
+            background-color: #0284c7;
+            color: white;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- 頂部導航導覽欄 -->
+    <header class="glass-card sticky top-0 z-50 px-6 py-4 flex flex-col md:flex-row items-center justify-between border-b border-white/5 gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                <i data-lucide="layers" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <h1 class="text-xl md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-400">
+                    Color Gamut Studio
+                </h1>
+                <p class="text-xs text-brand-500 font-bold uppercase tracking-wider">v2.0 Ultimate Console</p>
+            </div>
+        </div>
+
+        <!-- 導航頁籤 -->
+        <nav class="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5 gap-1 shrink-0">
+            <button id="tab-analyzer-btn" onclick="switchTab('analyzer')" class="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+                LED & 色域分析
+            </button>
+            <button id="tab-matcher-btn" onclick="switchTab('matcher')" class="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">
+                <i data-lucide="monitor" class="w-4 h-4"></i>
+                雙螢幕色域對齊
+            </button>
+            <button id="tab-principles-btn" onclick="switchTab('principles')" class="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">
+                <i data-lucide="book-open" class="w-4 h-4"></i>
+                物理與數學原理
+            </button>
+        </nav>
+
+        <!-- 全域設定 (CIE 空間切換) -->
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400 font-medium hidden sm:inline flex items-center gap-1">
+                <i data-lucide="compass" class="w-3.5 h-3.5"></i>色彩空間：
+            </span>
+            <div class="flex bg-zinc-950 p-0.5 rounded-lg border border-white/5 shrink-0">
+                <input type="radio" id="space-1931" name="colorSpace" value="1931" class="hidden space-radio" checked onchange="handleColorSpaceChange('1931')">
+                <label for="space-1931" class="cursor-pointer px-3 py-1 text-xs font-semibold text-slate-400 rounded-md block transition-all">CIE 1931 (x, y)</label>
+                
+                <input type="radio" id="space-1976" name="colorSpace" value="1976" class="hidden space-radio" onchange="handleColorSpaceChange('1976')">
+                <label for="space-1976" class="cursor-pointer px-3 py-1 text-xs font-semibold text-slate-400 rounded-md block transition-all">CIE 1976 (u', v')</label>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 md:p-6 max-w-7xl mx-auto w-full">
+
+        <!-- ==================== TAB 1: LED &色域分析儀 ==================== -->
+        <section id="tab-analyzer" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- 左側控制面板 -->
+                <div class="lg:col-span-4 flex flex-col gap-6">
+                    
+                    <!-- 1. 波長與 LED 配置 -->
+                    <div class="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                        <div class="flex items-center justify-between border-b border-white/5 pb-3">
+                            <h3 class="font-bold text-white flex items-center gap-2 text-base">
+                                <span class="w-1.5 h-4 bg-brand-500 rounded"></span>
+                                1. LED 變動波長範圍 (nm)
+                            </h3>
+                            <button onclick="applyLedToMatcher()" class="text-xs bg-brand-600/20 hover:bg-brand-600 text-brand-500 hover:text-white px-2 py-1 rounded transition-colors border border-brand-500/20">
+                                傳送至螢幕對齊
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="font-bold text-red-500 text-xs w-16 flex items-center gap-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>紅光 (R)
+                                </label>
+                                <input type="number" id="r-min" value="620" min="600" max="700" step="1" onchange="updateAnalyzer()">
+                                <span class="text-slate-500 text-xs font-mono">至</span>
+                                <input type="number" id="r-max" value="625" min="600" max="700" step="1" onchange="updateAnalyzer()">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label class="font-bold text-green-500 text-xs w-16 flex items-center gap-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>綠光 (G)
+                                </label>
+                                <input type="number" id="g-min" value="515" min="500" max="560" step="1" onchange="updateAnalyzer()">
+                                <span class="text-slate-500 text-xs font-mono">至</span>
+                                <input type="number" id="g-max" value="535" min="500" max="560" step="1" onchange="updateAnalyzer()">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label class="font-bold text-blue-500 text-xs w-16 flex items-center gap-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>藍光 (B)
+                                </label>
+                                <input type="number" id="b-min" value="460" min="400" max="490" step="1" onchange="updateAnalyzer()">
+                                <span class="text-slate-500 text-xs font-mono">至</span>
+                                <input type="number" id="b-max" value="475" min="400" max="490" step="1" onchange="updateAnalyzer()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 標準色域涵蓋率 -->
+                    <div class="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                        <h3 class="font-bold text-white flex items-center gap-2 border-b border-white/5 pb-3 text-base">
+                            <span class="w-1.5 h-4 bg-purple-500 rounded"></span>
+                            2. 標準色域涵蓋率比對
+                        </h3>
+                        
+                        <div class="flex flex-wrap gap-x-4 gap-y-2.5">
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #a855f7;">
+                                <input type="checkbox" id="gamut-sRGB" class="gamut-checkbox mr-1.5" onchange="updateAnalyzer()"> sRGB
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #ec4899;">
+                                <input type="checkbox" id="gamut-NTSC" class="gamut-checkbox mr-1.5" onchange="updateAnalyzer()"> NTSC
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #eab308;">
+                                <input type="checkbox" id="gamut-PAL" class="gamut-checkbox mr-1.5" onchange="updateAnalyzer()"> PAL
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #06b6d4;">
+                                <input type="checkbox" id="gamut-AdobeRGB" class="gamut-checkbox mr-1.5" onchange="updateAnalyzer()"> Adobe RGB
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #f97316;">
+                                <input type="checkbox" id="gamut-DCIP3" class="gamut-checkbox mr-1.5" onchange="updateAnalyzer()"> DCI-P3
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #10b981;">
+                                <input type="checkbox" id="gamut-Custom" class="gamut-checkbox mr-1.5" onchange="toggleCustomGamutPanel()"> 自定義 Rec.2020
+                            </label>
+                        </div>
+
+                        <!-- 自定義輸入 -->
+                        <div id="custom-gamut-panel" class="hidden p-3 bg-zinc-950/80 rounded-xl border border-white/5 space-y-2">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs text-slate-300 font-semibold">自定義 Rec.2020 頂點座標</span>
+                                <button onclick="presetRec2020()" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 py-0.5 rounded transition-colors">重設</button>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-[10px]">
+                                <div>
+                                    <label class="block text-red-400 mb-1 font-bold">R (x, y)</label>
+                                    <input type="number" id="c-rx" value="0.708" step="0.001" class="w-full mb-1" onchange="updateAnalyzer()">
+                                    <input type="number" id="c-ry" value="0.292" step="0.001" class="w-full" onchange="updateAnalyzer()">
+                                </div>
+                                <div>
+                                    <label class="block text-green-400 mb-1 font-bold">G (x, y)</label>
+                                    <input type="number" id="c-gx" value="0.170" step="0.001" class="w-full mb-1" onchange="updateAnalyzer()">
+                                    <input type="number" id="c-gy" value="0.797" step="0.001" class="w-full" onchange="updateAnalyzer()">
+                                </div>
+                                <div>
+                                    <label class="block text-blue-400 mb-1 font-bold">B (x, y)</label>
+                                    <input type="number" id="c-bx" value="0.131" step="0.001" class="w-full mb-1" onchange="updateAnalyzer()">
+                                    <input type="number" id="c-by" value="0.046" step="0.001" class="w-full" onchange="updateAnalyzer()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 涵蓋率表格 -->
+                        <div id="coverage-container" class="hidden bg-zinc-950/80 rounded-xl p-3 border border-white/5">
+                            <div class="grid grid-cols-4 gap-2 text-[10px] text-slate-400 font-bold border-b border-slate-700 pb-1 mb-1">
+                                <div class="col-span-2">標準名稱</div>
+                                <div class="text-right">覆蓋率</div>
+                                <div class="text-right">面積比</div>
+                            </div>
+                            <div id="coverage-results" class="space-y-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- 3. 目標白點與評估 -->
+                    <div class="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                        <h3 class="font-bold text-white flex items-center gap-2 border-b border-white/5 pb-3 text-base">
+                            <span class="w-1.5 h-4 bg-amber-500 rounded"></span>
+                            3. 目標白點與實測評估
+                        </h3>
+                        
+                        <div class="flex flex-wrap gap-4">
+                            <label class="flex items-center cursor-pointer text-xs text-slate-300">
+                                <input type="checkbox" id="show-planckian" class="mr-1.5 cursor-pointer" onchange="updateAnalyzer()"> 黑體軌跡
+                            </label>
+                            <label class="flex items-center cursor-pointer text-xs text-slate-300">
+                                <input type="checkbox" id="show-macadam" class="mr-1.5 cursor-pointer" onchange="updateAnalyzer()" checked> MacAdam 橢圓 (3/5 Step)
+                            </label>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="block text-slate-300 text-xs font-semibold">目標白點 (Target White)</label>
+                            <select id="target-white-select" class="w-full bg-zinc-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-brand-500" onchange="handleTargetWhiteSelectChange()">
+                                <optgroup label="標準日光" class="bg-zinc-950">
+                                    <option value="D65">D65 (6504K) - 標準顯示色溫</option>
+                                    <option value="D50">D50 (5003K) - 印刷影像標準</option>
+                                    <option value="D40">D40 (4000K)</option>
+                                </optgroup>
+                                <optgroup label="手動輸入" class="bg-zinc-950">
+                                    <option value="custom">✏️ 自定義色度座標</option>
+                                </optgroup>
+                            </select>
+                            <div class="flex gap-2">
+                                <input type="number" id="tw-x" value="0.3127" step="0.0001" class="w-full bg-zinc-950/60 text-slate-400" disabled onchange="updateAnalyzer()" placeholder="CIE x">
+                                <input type="number" id="tw-y" value="0.3290" step="0.0001" class="w-full bg-zinc-950/60 text-slate-400" disabled onchange="updateAnalyzer()" placeholder="CIE y">
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="block text-slate-300 text-xs font-semibold">實測白點 (Measured White)</label>
+                            <div class="flex gap-2">
+                                <input type="number" id="mw-x" value="0.3100" step="0.0001" class="w-full" onchange="updateAnalyzer()" placeholder="Measured x">
+                                <input type="number" id="mw-y" value="0.3320" step="0.0001" class="w-full" onchange="updateAnalyzer()" placeholder="Measured y">
+                            </div>
+                        </div>
+
+                        <!-- 評估數值顯示 -->
+                        <div class="grid grid-cols-2 gap-2.5 pt-1">
+                            <div class="bg-zinc-950 rounded-xl p-2.5 border border-white/5 text-center">
+                                <div class="text-[10px] text-slate-400 mb-1 flex items-center justify-center gap-1">
+                                    <i data-lucide="activity" class="w-3 h-3 text-brand-500"></i>色度差 &Delta;u'v'
+                                </div>
+                                <div id="res-duv" class="text-sm font-mono font-bold text-brand-500">0.0000</div>
+                            </div>
+                            <div class="bg-zinc-950 rounded-xl p-2.5 border border-white/5 text-center">
+                                <div class="text-[10px] text-slate-400 mb-1 flex items-center justify-center gap-1">
+                                    <i data-lucide="sun" class="w-3 h-3 text-emerald-500"></i>色純度 (Purity)
+                                </div>
+                                <div id="res-purity" class="text-sm font-mono font-bold text-emerald-500">0.0%</div>
+                            </div>
+                            <div class="bg-zinc-950 rounded-xl p-2.5 border border-white/5 col-span-2 flex justify-between items-center px-4">
+                                <div class="text-[11px] text-slate-400 flex items-center gap-1">
+                                    <i data-lucide="radio" class="w-3.5 h-3.5 text-amber-500"></i>主波長 (Dominant Wl)
+                                </div>
+                                <div id="res-dom-wl" class="text-sm font-mono font-bold text-amber-400">N/A</div>
+                            </div>
+                        </div>
+
+                        <!-- PWM 試算 -->
+                        <div class="bg-brand-950/20 rounded-xl p-3 border border-brand-900/30">
+                            <div class="text-[11px] font-bold text-brand-300 mb-2 flex justify-between">
+                                <span>PWM 混光亮度比例 (Luminance Y)</span>
+                            </div>
+                            <div id="pwm-result" class="flex h-5 rounded-md overflow-hidden bg-zinc-900">
+                                <!-- JS 動態渲染 -->
+                            </div>
+                            <div id="pwm-text" class="flex justify-between mt-1.5 text-[10px] font-mono font-bold">
+                                <!-- JS 動態渲染 -->
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 右側繪圖區 -->
+                <div class="lg:col-span-8 flex flex-col">
+                    <div class="glass-card p-3 rounded-2xl border border-white/5 flex flex-col justify-center h-full">
+                        <div id="cie-plot" class="w-full aspect-[4/3] max-h-[750px] rounded-xl overflow-hidden bg-zinc-950"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: 雙螢幕色域對齊 ==================== -->
+        <section id="tab-matcher" class="space-y-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- 左側控制面板 -->
+                <div class="lg:col-span-6 flex flex-col gap-6">
+                    
+                    <!-- Screen A / B 參數輸入 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Screen A -->
+                        <div class="glass-card p-4 rounded-xl border border-white/5 space-y-3">
+                            <h3 class="text-red-400 font-bold flex items-center gap-1.5 text-sm border-b border-white/5 pb-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Screen A (量測極限)
+                            </h3>
+                            <div class="flex items-center mb-1 text-[10px] text-slate-400 pl-[65px]">
+                                <div class="w-[85px] text-center">Y (亮度)</div>
+                                <div class="w-[85px] text-center">Cx</div>
+                                <div class="w-[85px] text-center">Cy</div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-red-200">紅光 (R)</div><input type="number" id="a_r_y" value="900" onchange="runMatcher()"><input type="number" id="a_r_cx" value="0.680" step="0.001" onchange="runMatcher()"><input type="number" id="a_r_cy" value="0.310" step="0.001" onchange="runMatcher()"></div>
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-green-200">綠光 (G)</div><input type="number" id="a_g_y" value="1800" onchange="runMatcher()"><input type="number" id="a_g_cx" value="0.190" step="0.001" onchange="runMatcher()"><input type="number" id="a_g_cy" value="0.740" step="0.001" onchange="runMatcher()"></div>
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-blue-200">藍光 (B)</div><input type="number" id="a_b_y" value="300" onchange="runMatcher()"><input type="number" id="a_b_cx" value="0.150" step="0.001" onchange="runMatcher()"><input type="number" id="a_b_cy" value="0.050" step="0.001" onchange="runMatcher()"></div>
+                            </div>
+                        </div>
+
+                        <!-- Screen B -->
+                        <div class="glass-card p-4 rounded-xl border border-white/5 space-y-3">
+                            <h3 class="text-emerald-400 font-bold flex items-center gap-1.5 text-sm border-b border-white/5 pb-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Screen B (量測極限)
+                            </h3>
+                            <div class="flex items-center mb-1 text-[10px] text-slate-400 pl-[65px]">
+                                <div class="w-[85px] text-center">Y (亮度)</div>
+                                <div class="w-[85px] text-center">Cx</div>
+                                <div class="w-[85px] text-center">Cy</div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-red-200">紅光 (R)</div><input type="number" id="b_r_y" value="850" onchange="runMatcher()"><input type="number" id="b_r_cx" value="0.640" step="0.001" onchange="runMatcher()"><input type="number" id="b_r_cy" value="0.330" step="0.001" onchange="runMatcher()"></div>
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-green-200">綠光 (G)</div><input type="number" id="b_g_y" value="1700" onchange="runMatcher()"><input type="number" id="b_g_cx" value="0.300" step="0.001" onchange="runMatcher()"><input type="number" id="b_g_cy" value="0.600" step="0.001" onchange="runMatcher()"></div>
+                                <div class="flex items-center"><div class="w-[65px] text-xs font-semibold text-blue-200">藍光 (B)</div><input type="number" id="b_b_y" value="280" onchange="runMatcher()"><input type="number" id="b_b_cx" value="0.150" step="0.001" onchange="runMatcher()"><input type="number" id="b_b_cy" value="0.060" step="0.001" onchange="runMatcher()"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 目標白點與校正核心選項 -->
+                    <div class="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                        <h3 class="font-bold text-white flex items-center gap-2 border-b border-white/5 pb-3 text-base">
+                            <span class="w-1.5 h-4 bg-cyan-500 rounded"></span>
+                            校正演算與白點對齊
+                        </h3>
+
+                        <!-- 演算法切換 -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-slate-300 text-xs font-semibold">校正引擎模式</label>
+                                <select id="matcher-mode-select" class="w-full bg-zinc-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-brand-500" onchange="handleMatcherModeChange()">
+                                    <option value="standard">🎯 D65 / 定量白點平衡 (標準模式)</option>
+                                    <option value="novastar">🚀 螢幕原生白點比例 (NovaStar 模式)</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-slate-300 text-xs font-semibold">白點總亮度目標 ($Y$)</label>
+                                <input type="number" id="t_w_y" value="500" step="10" class="w-full text-left" style="width: 100%; text-align: left;" onchange="runMatcher()">
+                            </div>
+                        </div>
+
+                        <!-- 定量白點座標設定 (Standard 模式下可編輯) -->
+                        <div id="white-coordinates-panel" class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-slate-400 text-[11px] font-medium">白點 Cx</label>
+                                <input type="number" id="t_w_cx" value="0.3127" step="0.0001" class="w-full text-left" style="width: 100%; text-align: left;" onchange="runMatcher()">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-slate-400 text-[11px] font-medium">白點 Cy</label>
+                                <input type="number" id="t_w_cy" value="0.3290" step="0.0001" class="w-full text-left" style="width: 100%; text-align: left;" onchange="runMatcher()">
+                            </div>
+                        </div>
+
+                        <!-- 商業算法修補選項 -->
+                        <div class="flex flex-wrap gap-5 bg-zinc-950/60 p-3 rounded-xl border border-white/5">
+                            <label class="flex items-center text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" id="chk_clip" class="gamut-checkbox mr-2" style="--chk-color:#0ea5e9;" checked onchange="runMatcher()">
+                                負數係數裁切 (Gamut Clip)
+                            </label>
+                            <label class="flex items-center text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" id="chk_normalize" class="gamut-checkbox mr-2" style="--chk-color:#10b981;" checked onchange="runMatcher()">
+                                係數歸一化 (Sum to 1.0)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 計算出的交集目標 -->
+                    <div class="glass-card p-5 rounded-2xl border border-cyan-500/10 bg-cyan-950/5 space-y-4">
+                        <div class="flex items-center justify-between border-b border-cyan-500/10 pb-3">
+                            <h3 class="font-bold text-cyan-400 flex items-center gap-2 text-base">
+                                <i data-lucide="crop" class="w-4 h-4 text-cyan-400"></i>
+                                計算所得共同目標色域
+                            </h3>
+                            <button onclick="applyCommonTargetToAnalyzer()" class="text-xs bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white px-2 py-1 rounded transition-colors border border-cyan-500/20">
+                                套用至標準色域比對
+                            </button>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-center text-xs text-slate-300 border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-800">
+                                        <th class="pb-2 text-left pl-3 font-semibold text-slate-400">色彩點</th>
+                                        <th class="pb-2 font-semibold text-slate-400">亮度 Y</th>
+                                        <th class="pb-2 font-semibold text-slate-400">座標 Cx</th>
+                                        <th class="pb-2 font-semibold text-slate-400">座標 Cy</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/50">
+                                    <tr>
+                                        <td class="py-2.5 text-left pl-3 font-bold text-red-400 flex items-center"><span class="color-label bg-red-500"></span>紅光 Target R</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_r_y_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_r_cx_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_r_cy_out">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2.5 text-left pl-3 font-bold text-green-400 flex items-center"><span class="color-label bg-green-500"></span>綠光 Target G</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_g_y_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_g_cx_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_g_cy_out">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2.5 text-left pl-3 font-bold text-blue-400 flex items-center"><span class="color-label bg-blue-500"></span>藍光 Target B</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_b_y_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_b_cx_out">-</td>
+                                        <td class="py-2.5 font-mono text-slate-200" id="t_b_cy_out">-</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側繪圖區與互動畫布 -->
+                <div class="lg:col-span-6 flex flex-col gap-6">
+                    <div class="glass-card p-5 rounded-2xl border border-white/5 flex flex-col items-center bg-black/40 min-h-[450px]">
+                        <div class="w-full text-center text-amber-400 text-xs mb-3 flex justify-center items-center gap-1.5 bg-amber-950/20 py-1.5 px-3 rounded-lg border border-amber-900/30">
+                            <i data-lucide="mouse-pointer" class="w-3.5 h-3.5 animate-bounce"></i>
+                            您可以直接在下方畫布上拖拉端點，調整 A 與 B 的原色座標
+                        </div>
+                        <div class="bg-black/60 rounded-xl p-2 border border-slate-900">
+                            <canvas id="gamutCanvas" width="440" height="440" class="bg-black rounded-lg"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下方診斷矩陣顯示區 -->
+            <div class="space-y-6">
+                <!-- 1. 原始發光特徵矩陣 M (反轉前) -->
+                <div class="glass-card p-5 rounded-2xl border border-white/5">
+                    <h3 class="text-sm font-semibold text-slate-400 border-b border-white/5 pb-3 text-center flex items-center justify-center gap-2">
+                        <i data-lucide="grid" class="w-4 h-4 text-slate-400"></i>
+                        原始發光特徵矩陣 ($M_{XYZ}$) — 求逆矩陣前
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                        <div class="flex flex-col items-center">
+                            <h4 class="text-xs text-red-400/80 mb-3 font-semibold">Screen A 特徵矩陣 ($M_A$)</h4>
+                            <div id="matrix-a-orig-display" class="flex flex-col items-center gap-1.5"></div>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <h4 class="text-xs text-emerald-400/80 mb-3 font-semibold">Screen B 特徵矩陣 ($M_B$)</h4>
+                            <div id="matrix-b-orig-display" class="flex flex-col items-center gap-1.5"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 色彩校正轉換矩陣 CSC (反轉與乘法後) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass-card p-5 rounded-2xl border border-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.02)]">
+                        <h3 class="text-red-400 font-bold text-center border-b border-red-950/30 pb-3 flex items-center justify-center gap-1.5 text-sm">
+                            <i data-lucide="cpu" class="w-4 h-4"></i>
+                            Screen A 色彩校正矩陣 (CSC)
+                        </h3>
+                        <div id="matrix-a-display" class="flex flex-col items-center gap-1.5 pt-4"></div>
+                    </div>
+                    <div class="glass-card p-5 rounded-2xl border border-emerald-950/20 shadow-[0_0_20px_rgba(16,185,129,0.02)]">
+                        <h3 class="text-emerald-400 font-bold text-center border-b border-emerald-950/30 pb-3 flex items-center justify-center gap-1.5 text-sm">
+                            <i data-lucide="cpu" class="w-4 h-4"></i>
+                            Screen B 色彩校正矩陣 (CSC)
+                        </h3>
+                        <div id="matrix-b-display" class="flex flex-col items-center gap-1.5 pt-4"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <p id="error-msg" class="text-red-500 text-center font-bold text-sm hidden p-3 bg-red-950/30 border border-red-900/50 rounded-xl">
+                ⚠️ 計算錯誤：無法算出多邊形交集或反矩陣，請確認座標與白點配置是否合理。
+            </p>
+        </section>
+
+        <!-- ==================== TAB 3: 原理與幫助 ==================== -->
+        <section id="tab-principles" class="space-y-6 hidden">
+            <div class="glass-card p-6 md:p-8 rounded-2xl border border-white/5 space-y-8">
+                <div>
+                    <h2 class="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                        <i data-lucide="info" class="w-6 h-6 text-brand-500"></i>
+                        色彩科學理論與軟體演算法說明
+                    </h2>
+                    <p class="text-slate-400 text-sm">此章節解說本工具箱背後所運用的線性代數及物理學幾何公式，以利理解程式如何算出對準色彩。</p>
+                </div>
+
+                <hr class="border-white/5">
+
+                <div class="space-y-6">
+                    <div class="space-y-2">
+                        <h3 class="text-lg font-bold text-brand-400">1. $xyY$ 與 $XYZ$ 色彩空間轉換</h3>
+                        <p class="text-slate-300 text-sm leading-relaxed">
+                            在 CIE 1931 色度系統中，座標 $x, y$ 僅代表色度（Chromaticity），並未包含亮度資訊。而色彩轉換矩陣的疊加必須在與光強度呈線性關係的 $XYZ$ 空間進行。轉換公式如下：
+                        </p>
+                        <div class="bg-zinc-950 p-4 rounded-xl text-center text-slate-200 overflow-x-auto border border-white/5">
+                            $$X = \frac{x \cdot Y}{y}$$
+                            $$Y = Y$$
+                            $$Z = \frac{(1 - x - y) \cdot Y}{y}$$
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h3 class="text-lg font-bold text-brand-400">2. 白點平衡反算 (White Point Balance)</h3>
+                        <p class="text-slate-300 text-sm leading-relaxed">
+                            當我們設定了目標白點的色度座標 $(x_w, y_w)$ 及總亮度 $Y_w$，系統必須決定紅、綠、藍三原色各自要出多少亮度（相對權重）才能精確混出該色溫。我們將目標白點的 $X_w, Y_w, Z_w$ 與目標 RGB 頂點的單位 XYZ 組成矩陣方程式：
+                        </p>
+                        <div class="bg-zinc-950 p-4 rounded-xl text-center text-slate-200 overflow-x-auto border border-white/5">
+                            $$\begin{bmatrix} X_w \\ Y_w \\ Z_w \end{bmatrix} = 
+                            \begin{bmatrix} 
+                            x_r/y_r & x_g/y_g & x_b/y_b \\ 
+                            1 & 1 & 1 \\ 
+                            (1-x_r-y_r)/y_r & (1-x_g-y_g)/y_g & (1-x_b-y_b)/y_b 
+                            \end{bmatrix} 
+                            \begin{bmatrix} Y_R \\ Y_G \\ Y_B \end{bmatrix}$$
+                        </div>
+                        <p class="text-slate-300 text-sm leading-relaxed">
+                            解出該逆矩陣，即可算出目標三通道所需的絕對亮度 $Y_R, Y_G, Y_B$。這是 D65 / 定量白點平衡之基礎。
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h3 class="text-lg font-bold text-brand-400">3. 雙螢幕色域對齊 (Gamut Matcher) 的步驟</h3>
+                        <div class="space-y-3 text-slate-300 text-sm leading-relaxed pl-4 list-decimal">
+                            <p><strong>第一步：多邊形交集</strong><br>利用 Sutherland-Hodgman 多邊形裁剪演算法，求出 Screen A 三角形與 Screen B 三角形在 CIE 空間中的交集凸多邊形。</p>
+                            <p><strong>第二步：求解最大三角形</strong><br>在多邊形交集頂點中遍歷所有可能的三點組合，利用行列式面積公式找出面積最大的三角形，以此作為共同目標色域的極限點（即 R, G, B 新標準座標）。</p>
+                            <p><strong>第三步：色彩空間轉換矩陣 (CSC) 的構成</strong><br>當有了螢幕的原始測量特徵矩陣 $M_{orig}$ 以及新生成的共同目標特徵矩陣 $M_{tgt}$ 後，將兩者相乘即可得到輸入訊號經校正後映射的係數表：
+                            $$CSC = M_{orig}^{-1} \times M_{tgt}$$
+                            將此 $3 \times 3$ 係數直接寫入顯示卡 LUT 或螢幕硬體控制晶片中，使不同發光特性的顯示器能達成同步一致的色彩輸出。</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h3 class="text-lg font-bold text-brand-400">4. 商業軟體校正演算法 (NovaStar 模式)</h3>
+                        <p class="text-slate-300 text-sm leading-relaxed">
+                            在實際硬體生產中，為了完全保留顯示器的發光效率而不進行強制亮度下壓，通常會將目標白點設為<strong>螢幕的物理原生混合白點</strong>。此時，目標白點由三原色滿載的 XYZ 直接相加得到：
+                            $$W_{native} = R_{XYZ} + G_{XYZ} + B_{XYZ}$$
+                            並在算出的校正矩陣進行兩步硬體優化：
+                        </p>
+                        <div class="bg-zinc-950 p-4 rounded-xl text-slate-300 space-y-2 text-xs border border-white/5 pl-6 list-disc">
+                            <p><strong>負數裁切 (Gamut Clip)</strong>：在對齊色域時若出現負數轉換係數，代表硬體無法打出負電壓（即飽和度已超越極限），會強制將其歸零，避免像素溢出與異常雜訊。</p>
+                            <p><strong>係數歸一化 (Normalize - Sum to 1)</strong>：歸零後，為防止整體白平衡總能量失衡，該通道的各原色比例會重新除以各項加總值，使行/列元素和維持為 1.0。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-white/5">
+
+                <!-- 📜 版本變更日誌 -->
+                <div class="space-y-4">
+                    <h3 class="text-base font-bold text-white flex items-center gap-1.5">
+                        <i data-lucide="history" class="w-5 h-5 text-slate-400"></i>
+                        Color Gamut Studio 版本日誌 (Changelog)
+                    </h3>
+                    <div class="relative border-l border-brand-900 ml-3.5 space-y-6">
+                        <!-- v2.0 -->
+                        <div class="relative pl-6">
+                            <span class="absolute -left-[9px] top-1 w-4.5 h-4.5 rounded-full bg-brand-500 border-4 border-zinc-950"></span>
+                            <span class="text-xs bg-brand-900/40 text-brand-400 px-2 py-0.5 rounded font-mono font-bold">v2.0 (最新整合版)</span>
+                            <p class="text-slate-200 text-xs font-semibold mt-1">整合五大模組成全功能工作台：</p>
+                            <ul class="list-disc pl-5 text-slate-400 text-xs space-y-1 mt-1">
+                                <li>整併 Plotly 互動圖表與雙螢幕 Canvas 控制至單一頁面，支援全域 CIE 空間切換。</li>
+                                <li>加入 Tab 傳送按鈕：一鍵傳送 LED 中位數至雙螢幕配置，或傳送對齊結果至色域比對自定義 Rec.2020。</li>
+                                <li>KaTeX 支援：原生渲染物理公式。</li>
+                                <li>雙引擎整合：支援標準 D65 白點平衡模式與諾瓦 native 白點模式切換，整合係數歸一化與 Gamut Clip 機制。</li>
+                            </ul>
+                        </div>
+                        <!-- v1.7.1 -->
+                        <div class="relative pl-6">
+                            <span class="absolute -left-[9px] top-1 w-4.5 h-4.5 rounded-full bg-zinc-700 border-4 border-zinc-950"></span>
+                            <span class="text-xs bg-zinc-800 text-slate-400 px-2 py-0.5 rounded font-mono">v1.7.1</span>
+                            <p class="text-slate-400 text-xs mt-1">
+                                建立 LED 變動波長分析、涵蓋率幾何交集、以及基於 Cramer's Rule 的 PWM 混光求解算法。
+                            </p>
+                        </div>
+                        <!-- v1.4 -->
+                        <div class="relative pl-6">
+                            <span class="absolute -left-[9px] top-1 w-4.5 h-4.5 rounded-full bg-zinc-700 border-4 border-zinc-950"></span>
+                            <span class="text-xs bg-zinc-800 text-slate-400 px-2 py-0.5 rounded font-mono">v1.4</span>
+                            <p class="text-slate-400 text-xs mt-1">
+                                新增求逆矩陣前的 Screen A/B 原始特徵矩陣 ($M_{XYZ}$) 展示面板。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 底部資訊欄 -->
+    <footer class="glass-card mt-auto border-t border-white/5 py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <p>© 2026 Color Gamut Studio. 全端互動式顯示設備校正與色差分析儀表板</p>
+        <div class="flex items-center gap-4">
+            <span class="text-brand-500 font-semibold flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> 系統已就緒</span>
+        </div>
+    </footer>
+
+    <!-- ==================== JavaScript 色彩科學引擎 ==================== -->
+    <script>
+        // --- 核心色彩科學常數與數據 ---
+        
+        // 全域應用程式狀態
+        const appState = {
+            currentTab: 'analyzer',
+            colorSpace: '1931',
+            matcherMode: 'standard'
+        };
+
+        // CIE 1931 光譜軌跡數據 (380nm - 700nm, step 5nm)
+        const cieData = [
+            [0.1741, 0.0050], [0.1740, 0.0050], [0.1738, 0.0049], [0.1736, 0.0049], [0.1733, 0.0048], [0.1730, 0.0048], [0.1726, 0.0048], [0.1721, 0.0048], 
+            [0.1714, 0.0051], [0.1703, 0.0058], [0.1689, 0.0069], [0.1669, 0.0086], [0.1644, 0.0109], [0.1611, 0.0138], [0.1566, 0.0177], [0.1510, 0.0227], 
+            [0.1440, 0.0297], [0.1355, 0.0399], [0.1241, 0.0578], [0.1096, 0.0868], [0.0913, 0.1327], [0.0687, 0.2007], [0.0454, 0.2950], [0.0235, 0.4127], 
+            [0.0082, 0.5384], [0.0039, 0.6548], [0.0139, 0.7502], [0.0389, 0.8120], [0.0743, 0.8338], [0.1142, 0.8262], [0.1547, 0.8059], [0.1929, 0.7816], 
+            [0.2296, 0.7543], [0.2658, 0.7243], [0.3016, 0.6923], [0.3373, 0.6589], [0.3731, 0.6245], [0.4087, 0.5896], [0.4441, 0.5547], [0.4788, 0.5202], 
+            [0.5125, 0.4866], [0.5448, 0.4544], [0.5752, 0.4242], [0.6029, 0.3965], [0.6270, 0.3725], [0.6482, 0.3514], [0.6658, 0.3340], [0.6801, 0.3197], 
+            [0.6915, 0.3083], [0.7006, 0.2993], [0.7079, 0.2920], [0.7140, 0.2859], [0.7190, 0.2809], [0.7230, 0.2770], [0.7260, 0.2740], [0.7283, 0.2717], 
+            [0.7300, 0.2700], [0.7311, 0.2689], [0.7320, 0.2680], [0.7327, 0.2673], [0.7334, 0.2666], [0.7340, 0.2660], [0.7344, 0.2656], [0.7346, 0.2654], [0.7347, 0.2653]
+        ];
+
+        // 標準 MacAdam 中心參數 (以 CIE 1931 x,y 定義的橢圓形)
+        const macadamStandards = [
+            { T: 2700, x: 0.4578, y: 0.4101, a: 0.00270, b: 0.00140, theta: 53.6 },
+            { T: 3000, x: 0.4338, y: 0.4030, a: 0.00278, b: 0.00136, theta: 53.2 },
+            { T: 4000, x: 0.3818, y: 0.3797, a: 0.00313, b: 0.00133, theta: 54.0 },
+            { T: 5000, x: 0.3447, y: 0.3553, a: 0.00274, b: 0.00118, theta: 59.6 },
+            { T: 6500, x: 0.3127, y: 0.3290, a: 0.00224, b: 0.00087, theta: 58.5 }
+        ];
+
+        // 標準色域頂點
+        const standardGamuts = {
+            sRGB: { name: 'sRGB', color: '#a855f7', coords: [{x: 0.64, y: 0.33}, {x: 0.30, y: 0.60}, {x: 0.15, y: 0.06}] },
+            NTSC: { name: 'NTSC', color: '#ec4899', coords: [{x: 0.67, y: 0.33}, {x: 0.21, y: 0.71}, {x: 0.14, y: 0.08}] },
+            PAL: { name: 'PAL', color: '#eab308', coords: [{x: 0.64, y: 0.33}, {x: 0.29, y: 0.60}, {x: 0.15, y: 0.06}] },
+            AdobeRGB: { name: 'Adobe RGB', color: '#06b6d4', coords: [{x: 0.64, y: 0.33}, {x: 0.21, y: 0.71}, {x: 0.15, y: 0.06}] },
+            DCIP3: { name: 'DCI-P3', color: '#f97316', coords: [{x: 0.680, y: 0.320}, {x: 0.265, y: 0.690}, {x: 0.150, y: 0.060}] }
+        };
+
+        // 外部套用色域快取變數
+        let appliedCommonTarget = null;
+
+
+        // ==================== 基礎色彩數學函式 ====================
+
+        function wavelengthToCIExy(wave) {
+            if (wave <= 380) return { x: cieData[0][0], y: cieData[0][1] };
+            if (wave >= 700) return { x: cieData[64][0], y: cieData[64][1] };
+            let i = Math.floor((wave - 380) / 5);
+            let f = ((wave - 380) / 5) - i;
+            return { x: cieData[i][0] * (1 - f) + cieData[i+1][0] * f, y: cieData[i][1] * (1 - f) + cieData[i+1][1] * f };
+        }
+
+        function xyY_to_XYZ(x, y, Y) {
+            if (Math.abs(y) < 0.0001) throw new Error("Cy 不能為 0");
+            return [(x * Y) / y, Y, ((1 - x - y) * Y) / y];
+        }
+
+        function xyToUpVp(x, y) {
+            let den = -2 * x + 12 * y + 3;
+            if (den === 0) return { u: 0, v: 0 };
+            return { u: (4 * x) / den, v: (9 * y) / den };
+        }
+
+        function toCurrentSpace(x, y) {
+            if (appState.colorSpace === '1976') {
+                let upvp = xyToUpVp(x, y);
+                return { x: upvp.u, y: upvp.v };
+            }
+            return { x, y };
+        }
+
+        // 行列式求解 3x3 反矩陣
+        function invert3x3(m) {
+            let det = m[0][0]*(m[1][1]*m[2][2] - m[2][1]*m[1][2]) 
+                    - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0]) 
+                    + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+            if (Math.abs(det) < 1e-15) throw new Error("奇異矩陣，無法求反矩陣");
+            return [
+                [(m[1][1]*m[2][2] - m[2][1]*m[1][2])/det, (m[0][2]*m[2][1] - m[0][1]*m[2][2])/det, (m[0][1]*m[1][2] - m[0][2]*m[1][1])/det],
+                [(m[1][2]*m[2][0] - m[1][0]*m[2][2])/det, (m[0][0]*m[2][2] - m[0][2]*m[2][0])/det, (m[1][0]*m[0][2] - m[0][0]*m[1][2])/det],
+                [(m[1][0]*m[2][1] - m[1][1]*m[2][0])/det, (m[2][0]*m[0][1] - m[0][0]*m[2][1])/det, (m[0][0]*m[1][1] - m[1][0]*m[0][1])/det]
+            ];
+        }
+
+        // 3x3 矩陣相乘
+        function multiply3x3(a, b) {
+            let res = [[0,0,0], [0,0,0], [0,0,0]];
+            for (let i = 0; i < 3; i++)
+                for (let j = 0; j < 3; j++)
+                    res[i][j] = a[i][0]*b[0][j] + a[i][1]*b[1][j] + a[i][2]*b[2][j];
+            return res;
+        }
+
+        // 3x3 矩陣乘以向量
+        function multiplyMatrixVector(m, v) {
+            return [
+                m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2],
+                m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2],
+                m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2]
+            ];
+        }
+
+        // ==================== 多邊形幾何運算演算法 ====================
+        
+        function sortCCW(pts) {
+            let cx = 0, cy = 0; pts.forEach(p => { cx += p.x; cy += p.y; }); cx /= pts.length; cy /= pts.length;
+            return pts.slice().sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+        }
+
+        // Sutherland-Hodgman 剪裁多邊形
+        function intersectPolygons(poly1, poly2) {
+            let outputList = sortCCW(poly1), clipPoly = sortCCW(poly2);
+            for (let i = 0; i < clipPoly.length; i++) {
+                let nextList = [], start = clipPoly[i], end = clipPoly[(i + 1) % clipPoly.length];
+                let isInside = (p) => (end.x - start.x) * (p.y - start.y) - (end.y - start.y) * (p.x - start.x) >= -1e-9;
+                let getIntersection = (p1, p2) => {
+                    let dx1 = end.x - start.x, dy1 = end.y - start.y;
+                    let dx2 = p2.x - p1.x, dy2 = p2.y - p1.y;
+                    let det = dx1 * dy2 - dy1 * dx2;
+                    if (Math.abs(det) < 1e-15) return p1;
+                    let t = ((p1.x - start.x) * dy2 - (p1.y - start.y) * dx2) / det;
+                    return { x: start.x + t * dx1, y: start.y + t * dy1 };
+                };
+                for (let j = 0; j < outputList.length; j++) {
+                    let curr = outputList[j], prev = outputList[(j + outputList.length - 1) % outputList.length];
+                    if (isInside(curr)) {
+                        if (!isInside(prev)) nextList.push(getIntersection(prev, curr));
+                        nextList.push(curr);
+                    } else if (isInside(prev)) {
+                        nextList.push(getIntersection(prev, curr));
+                    }
+                }
+                outputList = nextList;
+            }
+            return outputList;
+        }
+
+        function triangleArea(p1, p2, p3) {
+            return Math.abs((p1.x*(p2.y-p3.y) + p2.x*(p3.y-p1.y) + p3.x*(p1.y-p2.y))/2);
+        }
+
+        // 在多邊形交集中找最大內接三角形
+        function findTargetGamut(intersectionPoly) {
+            if (intersectionPoly.length < 3) return null;
+            let p = [...intersectionPoly];
+            if (p.length === 3) return classifyRGB(p);
+            
+            let maxArea = 0, bestTri = null, n = p.length;
+            for(let i=0; i<n-2; i++) {
+                for(let j=i+1; j<n-1; j++) {
+                    for(let k=j+1; k<n; k++) {
+                        let area = triangleArea(p[i], p[j], p[k]);
+                        if (area > maxArea) { maxArea = area; bestTri = [p[i], p[j], p[k]]; }
+                    }
+                }
+            }
+            return classifyRGB(bestTri);
+        }
+
+        function classifyRGB(pts) {
+            let p = [...pts]; p.sort((a,b) => b.x - a.x);
+            let red = p[0]; let remaining = [p[1], p[2]]; remaining.sort((a,b) => b.y - a.y);
+            let green = remaining[0]; let blue = remaining[1];  
+            return { R: red, G: green, B: blue };
+        }
+
+
+        // ==================== TAB 1: LED 與標準色域分析演算法 ====================
+
+        function presetRec2020() {
+            document.getElementById('c-rx').value = 0.708; document.getElementById('c-ry').value = 0.292;
+            document.getElementById('c-gx').value = 0.170; document.getElementById('c-gy').value = 0.797;
+            document.getElementById('c-bx').value = 0.131; document.getElementById('c-by').value = 0.046;
+            updateAnalyzer();
+        }
+
+        function getMacAdamEllipse(cx, cy, steps) {
+            let closest = macadamStandards[0], minDist = Infinity;
+            for(let m of macadamStandards) {
+                let d = Math.pow(m.x - cx, 2) + Math.pow(m.y - cy, 2);
+                if(d < minDist) { minDist = d; closest = m; }
+            }
+            let a = closest.a * steps, b = closest.b * steps, rad = closest.theta * Math.PI / 180;
+            let ptsX = [], ptsY = [];
+            for(let i=0; i<=360; i+=10) {
+                let t = i * Math.PI / 180;
+                let x = a * Math.cos(t), y = b * Math.sin(t);
+                let xRot = x * Math.cos(rad) - y * Math.sin(rad);
+                let yRot = x * Math.sin(rad) + y * Math.cos(rad);
+                ptsX.push(cx + xRot); ptsY.push(cy + yRot);
+            }
+            return {x: ptsX, y: ptsY};
+        }
+
+        function getLineIntersection(pOrigin, pDir, p1, p2) {
+            let v1 = { x: pOrigin.x - p1.x, y: pOrigin.y - p1.y };
+            let v2 = { x: p2.x - p1.x, y: p2.y - p1.y };
+            let v3 = { x: -pDir.y, y: pDir.x };
+            let dot = v2.x * v3.x + v2.y * v3.y;
+            if (Math.abs(dot) < 1e-9) return null;
+            let t1 = (v2.x * v1.y - v2.y * v1.x) / dot;
+            let t2 = (v1.x * v3.x + v1.y * v3.y) / dot;
+            if (t1 >= 0 && t2 >= 0 && t2 <= 1) {
+                return { t: t1, pt: { x: pOrigin.x + t1 * pDir.x, y: pOrigin.y + t1 * pDir.y }, fraction: t2 };
+            }
+            return null;
+        }
+
+        function calculateDominantWavelength(xw, yw, xm, ym) {
+            let dx = xm - xw, dy = ym - yw;
+            if (dx === 0 && dy === 0) return { wl: "White", purity: 0, isComplementary: false, intersect: {x:xw, y:yw} };
+            let minT = Infinity, bestIntersect = null, isPurple = false, domWl = null;
+
+            for(let i=0; i<65; i++) {
+                let p1 = {x: cieData[i][0], y: cieData[i][1]};
+                let p2 = (i === 64) ? {x: cieData[0][0], y: cieData[0][1]} : {x: cieData[i+1][0], y: cieData[i+1][1]};
+                let inter = getLineIntersection({x:xw, y:yw}, {x:dx, y:dy}, p1, p2);
+                if (inter && inter.t > 0 && inter.t < minT) {
+                    minT = inter.t; bestIntersect = inter; isPurple = (i === 64);
+                    if (!isPurple) domWl = 380 + (i * 5) + (inter.fraction * 5);
+                }
+            }
+            if (!bestIntersect) return { wl: "N/A", purity: 0, intersect: {x:xw, y:yw} };
+            let purity = (1.0 / minT) * 100;
+
+            if (isPurple) {
+                let backMinT = Infinity, backWl = null;
+                for(let i=0; i<64; i++) {
+                    let p1 = {x: cieData[i][0], y: cieData[i][1]}, p2 = {x: cieData[i+1][0], y: cieData[i+1][1]};
+                    let inter = getLineIntersection({x:xw, y:yw}, {x:-dx, y:-dy}, p1, p2);
+                    if (inter && inter.t > 0 && inter.t < backMinT) {
+                        backMinT = inter.t; backWl = 380 + (i * 5) + (inter.fraction * 5);
+                    }
+                }
+                return { wl: backWl ? backWl.toFixed(1) + "c nm" : "N/A", purity: purity, intersect: bestIntersect.pt };
+            }
+            return { wl: domWl.toFixed(1) + " nm", purity: purity, intersect: bestIntersect.pt };
+        }
+
+        function solvePWM(xr, yr, xg, yg, xb, yb, xw, yw) {
+            if (yr===0 || yg===0 || yb===0 || yw===0) return null;
+            let Xw = xw/yw, Zw = (1-xw-yw)/yw;
+            let Xr = xr/yr, Zr = (1-xr-yr)/yr;
+            let Xg = xg/yg, Zg = (1-xg-yg)/yg;
+            let Xb = xb/yb, Zb = (1-xb-yb)/yb;
+            
+            let detA = Xr*(Zb - Zg) - Xg*(Zb - Zr) + Xb*(Zg - Zr);
+            if (Math.abs(detA) < 1e-9) return null; 
+            
+            let Yr = (Xw*(Zb - Zg) - Xg*(Zb - Zw) + Xb*(Zg - Zw)) / detA;
+            let Yg = (Xr*(Zb - Zw) - Xw*(Zb - Zr) + Xb*(Zw - Zr)) / detA;
+            let Yb = (Xr*(Zw - Zg) - Xg*(Zw - Zr) + Xw*(Zg - Zr)) / detA;
+            return {Yr, Yg, Yb};
+        }
+
+        function getDaylightWhitePoint(Tc) {
+            let effTc = Math.max(4000, Math.min(Tc, 25000));
+            let t = 1000 / effTc;
+            let x_D = effTc <= 7000 ? -4.6070*(t**3) + 2.9678*(t**2) + 0.09911*t + 0.244063 : -2.0064*(t**3) + 1.9018*(t**2) + 0.24748*t + 0.237040;
+            let y_D = -3.000*(x_D**2) + 2.870*x_D - 0.275;
+            return {x: x_D, y: y_D};
+        }
+
+        function getPlanckianXY(T) {
+            let effT = Math.max(1667, Math.min(T, 25000));
+            let t = 1000 / effT;
+            let x = effT <= 4000 ? -0.2661239*(t**3) - 0.2343589*(t**2) + 0.8776956*t + 0.179910 : -3.0258469*(t**3) + 2.1070379*(t**2) + 0.2226347*t + 0.240390;
+            let y = -1.1063814*(x**3) - 1.34811020*(x**2) + 2.18555832*x - 0.20219683;
+            return {x, y};
+        }
+
+        function handleTargetWhiteSelectChange() {
+            let select = document.getElementById('target-white-select').value;
+            let tx = document.getElementById('tw-x'), ty = document.getElementById('tw-y');
+            if (select === 'custom') {
+                tx.disabled = false; ty.disabled = false;
+                tx.classList.replace('text-slate-400', 'text-white');
+                ty.classList.replace('text-slate-400', 'text-white');
+            } else {
+                tx.disabled = true; ty.disabled = true;
+                tx.classList.replace('text-white', 'text-slate-400');
+                ty.classList.replace('text-white', 'text-slate-400');
+                let wp = getDaylightWhitePoint(parseInt(select.replace('D', '')) * 100);
+                tx.value = wp.x.toFixed(4); ty.value = wp.y.toFixed(4);
+            }
+            updateAnalyzer();
+        }
+
+        function sanitizeInput(id, def, min, max) {
+            let el = document.getElementById(id), val = parseFloat(el.value);
+            if (isNaN(val)) val = def;
+            val = Math.max(min, Math.min(val, max));
+            el.value = val; return val;
+        }
+
+        function toggleCustomGamutPanel() {
+            const panel = document.getElementById('custom-gamut-panel');
+            panel.classList.toggle('hidden', !document.getElementById('gamut-Custom').checked);
+            updateAnalyzer();
+        }
+
+        function getPolygonArea(vertices) {
+            let area = 0, n = vertices.length;
+            if (n < 3) return 0;
+            for (let i = 0; i < n; i++) { area += vertices[i].x * vertices[(i + 1) % n].y - vertices[(i + 1) % n].x * vertices[i].y; }
+            return Math.abs(area / 2.0);
+        }
+
+        // Tab 1 主渲染與更新
+        function updateAnalyzer() {
+            let rMin = sanitizeInput('r-min', 620, 600, 700), rMax = sanitizeInput('r-max', 625, 600, 700);
+            let gMin = sanitizeInput('g-min', 515, 500, 560), gMax = sanitizeInput('g-max', 535, 500, 560);
+            let bMin = sanitizeInput('b-min', 460, 400, 490), bMax = sanitizeInput('b-max', 475, 400, 490);
+            if(rMin>rMax)[rMin,rMax]=[rMax,rMin]; if(gMin>gMax)[gMin,gMax]=[gMax,gMin]; if(bMin>bMax)[bMin,bMax]=[bMax,bMin];
+
+            let tx = sanitizeInput('tw-x', 0.3127, 0.01, 0.9), ty = sanitizeInput('tw-y', 0.3290, 0.01, 0.9);
+            let mx = sanitizeInput('mw-x', 0.3100, 0.01, 0.9), my = sanitizeInput('mw-y', 0.3320, 0.01, 0.9);
+
+            let traces = [];
+
+            // 1. 光譜軌跡
+            const locusX = [], locusY = [], locusText = [];
+            for (let w = 380; w <= 780; w += 1) {
+                let c = toCurrentSpace(wavelengthToCIExy(w).x, wavelengthToCIExy(w).y);
+                locusX.push(c.x); locusY.push(c.y); locusText.push(`${w} nm`);
+            }
+            locusX.push(locusX[0]); locusY.push(locusY[0]); locusText.push('Line of Purples');
+            traces.push({ x: locusX, y: locusY, text: locusText, mode: 'lines', line: { color: '#475569', width: 2 }, name: '光譜軌跡', hoverinfo: 'text+x+y' });
+
+            // 2. LED 波長變動區間
+            const getWlCoords = (min, max) => { let rx=[], ry=[]; for(let w=min; w<=max; w++) { let c = toCurrentSpace(wavelengthToCIExy(w).x, wavelengthToCIExy(w).y); rx.push(c.x); ry.push(c.y); } return {x: rx, y: ry}; };
+            let rCoords = getWlCoords(rMin, rMax), gCoords = getWlCoords(gMin, gMax), bCoords = getWlCoords(bMin, bMax);
+            traces.push({ x: rCoords.x, y: rCoords.y, mode: 'lines+markers', line: { color: '#ef4444', width: 5 }, marker: { size: 6, color: '#f87171' }, name: '紅光變動範圍' });
+            traces.push({ x: gCoords.x, y: gCoords.y, mode: 'lines+markers', line: { color: '#22c55e', width: 5 }, marker: { size: 6, color: '#4ade80' }, name: '綠光變動範圍' });
+            traces.push({ x: bCoords.x, y: bCoords.y, mode: 'lines+markers', line: { color: '#3b82f6', width: 5 }, marker: { size: 6, color: '#60a5fa' }, name: '藍光變動範圍' });
+            
+            let ptRMin = toCurrentSpace(wavelengthToCIExy(rMin).x, wavelengthToCIExy(rMin).y), ptRMax = toCurrentSpace(wavelengthToCIExy(rMax).x, wavelengthToCIExy(rMax).y);
+            let ptGMin = toCurrentSpace(wavelengthToCIExy(gMin).x, wavelengthToCIExy(gMin).y), ptGMax = toCurrentSpace(wavelengthToCIExy(gMax).x, wavelengthToCIExy(gMax).y);
+            let ptBMin = toCurrentSpace(wavelengthToCIExy(bMin).x, wavelengthToCIExy(bMin).y), ptBMax = toCurrentSpace(wavelengthToCIExy(bMax).x, wavelengthToCIExy(bMax).y);
+            traces.push({
+                x: [ptBMin.x, ptBMax.x, ptGMin.x, ptGMax.x, ptRMin.x, ptRMax.x, ptBMin.x], y: [ptBMin.y, ptBMax.y, ptGMin.y, ptGMax.y, ptRMin.y, ptRMax.y, ptBMin.y], 
+                mode: 'lines', fill: 'toself', fillcolor: 'rgba(14, 165, 233, 0.04)', line: { color: '#0ea5e9', width: 1, dash: 'dot' }, name: 'LED 物理極限範圍', hoverinfo: 'none'
+            });
+
+            // 3. 黑體與 MacAdam
+            if (document.getElementById('show-planckian').checked) {
+                let plX = [], plY = [];
+                for (let T = 1667; T <= 25000; T += 200) { let pt = getPlanckianXY(T); let c = toCurrentSpace(pt.x, pt.y); plX.push(c.x); plY.push(c.y); }
+                traces.push({ x: plX, y: plY, mode: 'lines', line: { color: '#f59e0b', width: 2 }, name: '黑體軌跡' });
+            }
+            if (document.getElementById('show-macadam').checked) {
+                let m3 = getMacAdamEllipse(tx, ty, 3);
+                let m3Space = {x: m3.x.map((_, i) => toCurrentSpace(m3.x[i], m3.y[i]).x), y: m3.y.map((_, i) => toCurrentSpace(m3.x[i], m3.y[i]).y)};
+                let m5 = getMacAdamEllipse(tx, ty, 5);
+                let m5Space = {x: m5.x.map((_, i) => toCurrentSpace(m5.x[i], m5.y[i]).x), y: m5.y.map((_, i) => toCurrentSpace(m5.x[i], m5.y[i]).y)};
+                
+                traces.push({ x: m5Space.x, y: m5Space.y, mode: 'lines', fill: 'toself', fillcolor: 'rgba(255, 255, 255, 0.03)', line: { color: '#475569', width: 1 }, name: '5-step MacAdam', hoverinfo: 'none' });
+                traces.push({ x: m3Space.x, y: m3Space.y, mode: 'lines', fill: 'toself', fillcolor: 'rgba(255, 255, 255, 0.08)', line: { color: '#94a3b8', width: 1.5 }, name: '3-step MacAdam', hoverinfo: 'none' });
+            }
+
+            // 4. 白點指標分析
+            let domData = calculateDominantWavelength(tx, ty, mx, my);
+            document.getElementById('res-dom-wl').innerText = domData.wl;
+            document.getElementById('res-purity').innerText = domData.purity.toFixed(1) + "%";
+            
+            let tupvp = xyToUpVp(tx, ty), mupvp = xyToUpVp(mx, my);
+            document.getElementById('res-duv').innerText = Math.sqrt(Math.pow(tupvp.u - mupvp.u, 2) + Math.pow(tupvp.v - mupvp.v, 2)).toFixed(4);
+
+            let tPt = toCurrentSpace(tx, ty), mPt = toCurrentSpace(mx, my), edgePt = toCurrentSpace(domData.intersect.x, domData.intersect.y);
+            traces.push({ x: [tPt.x, edgePt.x], y: [tPt.y, edgePt.y], mode: 'lines', line: { color: '#f59e0b', width: 1, dash: 'dot' }, name: '主波長射線', hoverinfo: 'none' });
+            traces.push({ x: [tPt.x], y: [tPt.y], mode: 'markers', marker: { symbol: 'star', size: 12, color: 'white', line: {color: '#000', width: 1.5} }, name: '目標白點' });
+            traces.push({ x: [mPt.x], y: [mPt.y], mode: 'markers', marker: { symbol: 'circle', size: 8, color: '#f59e0b', line: {color: 'white', width: 1.2} }, name: '實測白點' });
+
+            // 5. PWM 混光比例求解
+            let midR = wavelengthToCIExy((rMin + rMax) / 2.0);
+            let midG = wavelengthToCIExy((gMin + gMax) / 2.0);
+            let midB = wavelengthToCIExy((bMin + bMax) / 2.0);
+            let pwm = solvePWM(midR.x, midR.y, midG.x, midG.y, midB.x, midB.y, tx, ty);
+            let pwmBar = document.getElementById('pwm-result');
+            let pwmTxt = document.getElementById('pwm-text');
+            if (!pwm || pwm.Yr < 0 || pwm.Yg < 0 || pwm.Yb < 0) {
+                pwmBar.innerHTML = `<div class="w-full bg-red-950/40 flex items-center justify-center text-xs text-red-400 font-semibold border border-red-900/20 rounded-md">目標超出 LED 色域 (無法混光)</div>`;
+                pwmTxt.innerHTML = '';
+            } else {
+                let total = pwm.Yr + pwm.Yg + pwm.Yb;
+                let pr = (pwm.Yr / total * 100), pg = (pwm.Yg / total * 100), pb = (pwm.Yb / total * 100);
+                pwmBar.innerHTML = `
+                    <div style="width: ${pr}%" class="bg-red-500 h-full transition-all"></div>
+                    <div style="width: ${pg}%" class="bg-green-500 h-full transition-all"></div>
+                    <div style="width: ${pb}%" class="bg-blue-500 h-full transition-all"></div>`;
+                pwmTxt.innerHTML = `<span class="text-red-400">R: ${pr.toFixed(1)}%</span><span class="text-green-400">G: ${pg.toFixed(1)}%</span><span class="text-blue-400">B: ${pb.toFixed(1)}%</span>`;
+            }
+
+            // 6. 色域比對與涵蓋率
+            let ledTri = [toCurrentSpace(midR.x, midR.y), toCurrentSpace(midG.x, midG.y), toCurrentSpace(midB.x, midB.y)];
+            let ledArea = getPolygonArea(ledTri);
+            let resultsHTML = '', isAnyChecked = false;
+
+            let activeGamuts = Object.assign({}, standardGamuts);
+            if (document.getElementById('gamut-Custom').checked) {
+                activeGamuts['Custom'] = { name: '自定義 Rec.2020', color: '#10b981', coords: [
+                    {x: sanitizeInput('c-rx', 0.708, 0, 1), y: sanitizeInput('c-ry', 0.292, 0, 1)},
+                    {x: sanitizeInput('c-gx', 0.170, 0, 1), y: sanitizeInput('c-gy', 0.797, 0, 1)},
+                    {x: sanitizeInput('c-bx', 0.131, 0, 1), y: sanitizeInput('c-by', 0.046, 0, 1)}
+                ]};
+            }
+
+            // 若有外部套用的對齊目標色域
+            if (appliedCommonTarget) {
+                activeGamuts['Common'] = { name: '對齊共同色域', color: '#06b6d4', coords: [
+                    appliedCommonTarget.R, appliedCommonTarget.G, appliedCommonTarget.B
+                ]};
+                // 加入 Checkbox 讓使用者可開關
+                if (!document.getElementById('gamut-Common-wrap')) {
+                    const wrap = document.createElement('label');
+                    wrap.id = 'gamut-Common-wrap';
+                    wrap.className = 'flex items-center cursor-pointer text-xs font-medium hover:text-white';
+                    wrap.style = '--chk-color: #06b6d4;';
+                    wrap.innerHTML = `<input type="checkbox" id="gamut-Common" class="gamut-checkbox mr-1.5" checked onchange="updateAnalyzer()"> 對齊目標`;
+                    document.getElementById('gamut-Custom').parentNode.parentNode.appendChild(wrap);
+                }
+            }
+
+            const checkKeys = Object.keys(activeGamuts);
+            checkKeys.forEach(key => {
+                const el = document.getElementById('gamut-' + key);
+                if (el && el.checked) {
+                    isAnyChecked = true;
+                    let std = activeGamuts[key];
+                    let stdSpaceCoords = std.coords.map(pt => toCurrentSpace(pt.x, pt.y));
+                    
+                    traces.push({ 
+                        x: [...stdSpaceCoords.map(p=>p.x), stdSpaceCoords[0].x], 
+                        y: [...stdSpaceCoords.map(p=>p.y), stdSpaceCoords[0].y], 
+                        mode: 'lines', line: { color: std.color, width: 2, dash: 'dash' }, name: std.name, hoverinfo: 'none' 
+                    });
+
+                    let stdArea = getPolygonArea(stdSpaceCoords);
+                    let intersectPoly = intersectPolygons(ledTri, stdSpaceCoords);
+                    let intersectArea = getPolygonArea(intersectPoly);
+                    let cvg = stdArea === 0 ? 0 : (intersectArea / stdArea) * 100;
+                    let vol = stdArea === 0 ? 0 : (ledArea / stdArea) * 100;
+
+                    resultsHTML += `
+                    <div class="grid grid-cols-4 gap-2 text-xs py-1.5 border-b border-white/5 items-center">
+                        <div class="col-span-2 font-bold" style="color:${std.color}">${std.name}</div>
+                        <div class="text-right text-white font-mono font-semibold">${cvg.toFixed(1)}%</div>
+                        <div class="text-right text-slate-400 font-mono">${vol.toFixed(1)}%</div>
+                    </div>`;
+                }
+            });
+
+            document.getElementById('coverage-container').classList.toggle('hidden', !isAnyChecked);
+            document.getElementById('coverage-results').innerHTML = resultsHTML;
+
+            // Plotly 繪圖
+            const axisTitleX = appState.colorSpace === '1976' ? "u'" : "x";
+            const axisTitleY = appState.colorSpace === '1976' ? "v'" : "y";
+            const rangeMax = appState.colorSpace === '1976' ? 0.75 : 0.85;
+            
+            const layout = {
+                title: { 
+                    text: appState.colorSpace === '1976' ? 'CIE 1976 (u\', v\') 色度座標空間' : 'CIE 1931 (x, y) 色度座標空間', 
+                    font: { size: 14, color: '#f1f5f9', family: 'Outfit' }, y: 0.98 
+                },
+                xaxis: { title: { text: axisTitleX, font: { color: '#94a3b8' } }, range: [-0.05, rangeMax], zeroline: false, gridcolor: '#1e293b', tickfont: { color: '#64748b' } },
+                yaxis: { title: { text: axisTitleY, font: { color: '#94a3b8' } }, range: [-0.05, rangeMax], scaleanchor: 'x', scaleratio: 1, zeroline: false, gridcolor: '#1e293b', tickfont: { color: '#64748b' } },
+                plot_bgcolor: '#080c18', 
+                paper_bgcolor: 'rgba(0,0,0,0)', 
+                font: { color: '#f8fafc' }, 
+                margin: { l: 40, r: 15, t: 40, b: 40 },
+                showlegend: true, 
+                legend: { x: 0.95, y: 0.95, xanchor: 'right', yanchor: 'top', bgcolor: 'rgba(4,7,17,0.85)', bordercolor: '#1e293b', borderwidth: 1, font: { size: 10 } }, 
+                hovermode: 'closest'
+            };
+            Plotly.newPlot('cie-plot', traces, layout, { responsive: true, displayModeBar: false });
+        }
+
+        // 一鍵套用：將波長算出的 R,G,B 中位數丟到 Tab 2
+        function applyLedToMatcher() {
+            let rMin = getVal('r-min'), rMax = getVal('r-max');
+            let gMin = getVal('g-min'), gMax = getVal('g-max');
+            let bMin = getVal('b-min'), bMax = getVal('b-max');
+            
+            let midR = wavelengthToCIExy((rMin + rMax) / 2.0);
+            let midG = wavelengthToCIExy((gMin + gMax) / 2.0);
+            let midB = wavelengthToCIExy((bMin + bMax) / 2.0);
+
+            // 填入 Screen A
+            document.getElementById('a_r_cx').value = midR.x.toFixed(3);
+            document.getElementById('a_r_cy').value = midR.y.toFixed(3);
+            document.getElementById('a_g_cx').value = midG.x.toFixed(3);
+            document.getElementById('a_g_cy').value = midG.y.toFixed(3);
+            document.getElementById('a_b_cx').value = midB.x.toFixed(3);
+            document.getElementById('a_b_cy').value = midB.y.toFixed(3);
+            
+            // 提醒使用者並切換
+            switchTab('matcher');
+            runMatcher();
+        }
+
+
+        // ==================== TAB 2: 雙螢幕色域對齊演算法 ====================
+
+        let isDragging = false;
+        let dragTargetId = null; 
+        const canvasObj = document.getElementById('gamutCanvas');
+
+        function handleMatcherModeChange() {
+            appState.matcherMode = document.getElementById('matcher-mode-select').value;
+            const wpPanel = document.getElementById('white-coordinates-panel');
+            wpPanel.style.display = appState.matcherMode === 'novastar' ? 'none' : 'grid';
+            runMatcher();
+        }
+
+        function getControlPoints() {
+            return [
+                { id: 'a_r', cx: getVal('a_r_cx'), cy: getVal('a_r_cy') },
+                { id: 'a_g', cx: getVal('a_g_cx'), cy: getVal('a_g_cy') },
+                { id: 'a_b', cx: getVal('a_b_cx'), cy: getVal('a_b_cy') },
+                { id: 'b_r', cx: getVal('b_r_cx'), cy: getVal('b_r_cy') },
+                { id: 'b_g', cx: getVal('b_g_cx'), cy: getVal('b_g_cy') },
+                { id: 'b_b', cx: getVal('b_b_cx'), cy: getVal('b_b_cy') }
+            ];
+        }
+
+        function mapX(v, canvas) { return 40 + (v / 0.9) * (canvas.width - 80); }
+        function mapY(v, canvas) { return canvas.height - 40 - (v / 0.9) * (canvas.height - 80); }
+        function unmapX(px, canvas) { return ((px - 40) / (canvas.width - 80)) * 0.9; }
+        function unmapY(py, canvas) { return ((canvas.height - 40 - py) / (canvas.height - 80)) * 0.9; }
+
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+                y: (evt.clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        // 滑鼠/觸控事件
+        canvasObj.addEventListener('mousedown', function(evt) {
+            const mousePos = getMousePos(canvasObj, evt);
+            const points = getControlPoints();
+            const hitRadius = 15;
+
+            for (let p of points) {
+                const px = mapX(p.cx, canvasObj);
+                const py = mapY(p.cy, canvasObj);
+                if (Math.hypot(mousePos.x - px, mousePos.y - py) < hitRadius) {
+                    isDragging = true;
+                    dragTargetId = p.id;
+                    canvasObj.style.cursor = 'grabbing';
+                    document.getElementById(p.id + '_cx').classList.add('highlight-input');
+                    document.getElementById(p.id + '_cy').classList.add('highlight-input');
+                    break;
+                }
+            }
+        });
+
+        canvasObj.addEventListener('mousemove', function(evt) {
+            const mousePos = getMousePos(canvasObj, evt);
+            if (isDragging && dragTargetId) {
+                let newCx = Math.max(0, Math.min(0.9, unmapX(mousePos.x, canvasObj)));
+                let newCy = Math.max(0.001, Math.min(0.9, unmapY(mousePos.y, canvasObj)));
+                document.getElementById(dragTargetId + '_cx').value = newCx.toFixed(3);
+                document.getElementById(dragTargetId + '_cy').value = newCy.toFixed(3);
+                runMatcher();
+            } else {
+                const points = getControlPoints();
+                let isHovering = false;
+                for (let p of points) {
+                    const px = mapX(p.cx, canvasObj);
+                    const py = mapY(p.cy, canvasObj);
+                    if (Math.hypot(mousePos.x - px, mousePos.y - py) < 15) { isHovering = true; break; }
+                }
+                canvasObj.style.cursor = isHovering ? 'pointer' : 'default';
+            }
+        });
+
+        function stopDragging() {
+            if (isDragging && dragTargetId) {
+                document.getElementById(dragTargetId + '_cx').classList.remove('highlight-input');
+                document.getElementById(dragTargetId + '_cy').classList.remove('highlight-input');
+            }
+            isDragging = false; dragTargetId = null; canvasObj.style.cursor = 'default';
+        }
+        canvasObj.addEventListener('mouseup', stopDragging);
+        canvasObj.addEventListener('mouseleave', stopDragging);
+
+        // Canvas 畫布渲染
+        function drawMatcherCanvas(polyA, polyB, intersection, targetTri, targetWhite) {
+            const ctx = canvasObj.getContext('2d');
+            const w = canvasObj.width, h = canvasObj.height;
+            ctx.clearRect(0, 0, w, h);
+
+            // Grid 輔助線與格點
+            ctx.strokeStyle = '#1e293b'; ctx.fillStyle = '#475569'; ctx.font = '10px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            for(let i = 0; i <= 0.9; i += 0.1) {
+                let label = i.toFixed(1), x = mapX(i, canvasObj), y = mapY(i, canvasObj);
+                ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+                if (i > 0) ctx.fillText(label, x, h - 35);
+                ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+                ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+                if (i > 0) ctx.fillText(label, 32, y);
+                ctx.textAlign = 'center';
+            }
+            ctx.strokeStyle = '#334155'; ctx.strokeRect(40, 40, w - 80, h - 80);
+
+            // 繪製多邊形函式
+            const drawPoly = (pts, strokeColor, fillColor = null, isDashed = false) => {
+                if (!pts || pts.length < 3) return;
+                ctx.beginPath();
+                ctx.moveTo(mapX(pts[0].x, canvasObj), mapY(pts[0].y, canvasObj));
+                for(let i=1; i<pts.length; i++) ctx.lineTo(mapX(pts[i].x, canvasObj), mapY(pts[i].y, canvasObj));
+                ctx.closePath();
+                
+                if (fillColor) { ctx.fillStyle = fillColor; ctx.fill(); }
+                ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.8;
+                ctx.setLineDash(isDashed ? [6, 4] : []);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                if (isDashed) {
+                    pts.forEach(p => {
+                        ctx.fillStyle = strokeColor;
+                        ctx.beginPath(); ctx.arc(mapX(p.x, canvasObj), mapY(p.y, canvasObj), 6, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.stroke();
+                    });
+                }
+            };
+
+            // 畫 A 與 B 三角形
+            drawPoly(polyA, '#ef4444', null, true);
+            drawPoly(polyB, '#10b981', null, true);
+
+            // 畫交集目標(淺藍) 實心三角形與端點
+            if (targetTri) {
+                drawPoly([targetTri.R, targetTri.G, targetTri.B], '#0ea5e9', 'rgba(14, 165, 233, 0.15)', false);
+                [targetTri.R, targetTri.G, targetTri.B].forEach(p => {
+                    ctx.fillStyle = '#0ea5e9';
+                    ctx.beginPath(); ctx.arc(mapX(p.x, canvasObj), mapY(p.y, canvasObj), 4, 0, Math.PI*2); ctx.fill();
+                });
+            }
+
+            // 畫目標白點 (白色圓圈)
+            if (targetWhite) {
+                let wx = mapX(targetWhite.x, canvasObj), wy = mapY(targetWhite.y, canvasObj);
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(wx, wy, 5, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = '#94a3b8'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+                ctx.fillText(` W(${targetWhite.x.toFixed(3)}, ${targetWhite.y.toFixed(3)})`, wx + 7, wy - 6);
+            }
+        }
+
+        // 矩陣網格渲染
+        function renderMatrixToUI(matrixData, elementId) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = matrixData.map(row => 
+                `<div class="flex gap-2 justify-center">
+                    <div class="matrix-cell border border-red-950/20 text-red-400 font-mono">${row[0].toFixed(5)}</div>
+                    <div class="matrix-cell border border-emerald-950/20 text-emerald-400 font-mono">${row[1].toFixed(5)}</div>
+                    <div class="matrix-cell border border-brand-950/20 text-brand-400 font-mono">${row[2].toFixed(5)}</div>
+                </div>`
+            ).join('');
+        }
+
+        // Tab 2 雙螢幕對齊主運算
+        function runMatcher() {
+            const errBox = document.getElementById('error-msg');
+            errBox.classList.add('hidden');
+
+            try {
+                // 收集 A/B 數據
+                const polyA = [
+                    {x: getVal('a_r_cx'), y: getVal('a_r_cy'), Y: getVal('a_r_y')},
+                    {x: getVal('a_g_cx'), y: getVal('a_g_cy'), Y: getVal('a_g_y')},
+                    {x: getVal('a_b_cx'), y: getVal('a_b_cy'), Y: getVal('a_b_y')}
+                ];
+                const polyB = [
+                    {x: getVal('b_r_cx'), y: getVal('b_r_cy'), Y: getVal('b_r_y')},
+                    {x: getVal('b_g_cx'), y: getVal('b_g_cy'), Y: getVal('b_g_y')},
+                    {x: getVal('b_b_cx'), y: getVal('b_b_cy'), Y: getVal('b_b_y')}
+                ];
+
+                const t_w_y = getVal('t_w_y');
+                let t_w_cx = getVal('t_w_cx');
+                let t_w_cy = getVal('t_w_cy');
+
+                // 計算多邊形交集與最大內接三角形
+                const intersection = intersectPolygons(polyA, polyB);
+                const targetTri = findTargetGamut(intersection);
+
+                // 計算白點 (若 NovaStar 模式，白點由三原色相加得到，此處僅供預覽)
+                let activeW = {x: t_w_cx, y: t_w_cy};
+                if (appState.matcherMode === 'novastar') {
+                    // 以 Screen A 原生白點為基礎估算以供 Canvas 畫出
+                    let XYZ_A_R = xyY_to_XYZ(polyA[0].x, polyA[0].y, polyA[0].Y);
+                    let XYZ_A_G = xyY_to_XYZ(polyA[1].x, polyA[1].y, polyA[1].Y);
+                    let XYZ_A_B = xyY_to_XYZ(polyA[2].x, polyA[2].y, polyA[2].Y);
+                    let sumXYZ = [XYZ_A_R[0]+XYZ_A_G[0]+XYZ_A_B[0], XYZ_A_R[1]+XYZ_A_G[1]+XYZ_A_B[1], XYZ_A_R[2]+XYZ_A_G[2]+XYZ_A_B[2]];
+                    let sum = sumXYZ[0] + sumXYZ[1] + sumXYZ[2];
+                    if (sum > 0) activeW = {x: sumXYZ[0]/sum, y: sumXYZ[1]/sum};
+                }
+
+                drawMatcherCanvas(polyA, polyB, intersection, targetTri, activeW);
+
+                if (!targetTri) throw new Error("無可對齊的色域交集");
+
+                // 更新全域對齊目標快取 (供 Tab 1 調用)
+                appliedCommonTarget = targetTri;
+
+                let tgt_Y_R, tgt_Y_G, tgt_Y_B;
+                let M_T;
+
+                const buildMatrix = (r, g, b, yR, yG, yB) => {
+                    const XYZ_R = xyY_to_XYZ(r.x, r.y, yR);
+                    const XYZ_G = xyY_to_XYZ(g.x, g.y, yG);
+                    const XYZ_B = xyY_to_XYZ(b.x, b.y, yB);
+                    return [
+                        [XYZ_R[0], XYZ_G[0], XYZ_B[0]],
+                        [XYZ_R[1], XYZ_G[1], XYZ_B[1]],
+                        [XYZ_R[2], XYZ_G[2], XYZ_B[2]]
+                    ];
+                };
+
+                const M_A = buildMatrix(polyA[0], polyA[1], polyA[2], polyA[0].Y, polyA[1].Y, polyA[2].Y);
+                const M_B = buildMatrix(polyB[0], polyB[1], polyB[2], polyB[0].Y, polyB[1].Y, polyB[2].Y);
+
+                // 1. 原始特徵矩陣 M_A, M_B 渲染 (反轉前)
+                renderMatrixToUI(M_A, 'matrix-a-orig-display');
+                renderMatrixToUI(M_B, 'matrix-b-orig-display');
+
+                if (appState.matcherMode === 'standard') {
+                    // 標準白點對準 (與 targetWhite D65 平衡)
+                    const XYZ_W = xyY_to_XYZ(t_w_cx, t_w_cy, t_w_y);
+                    const P_matrix = [
+                        [targetTri.R.x / targetTri.R.y, targetTri.G.x / targetTri.G.y, targetTri.B.x / targetTri.B.y],
+                        [1, 1, 1], 
+                        [(1 - targetTri.R.x - targetTri.R.y) / targetTri.R.y, (1 - targetTri.G.x - targetTri.G.y) / targetTri.G.y, (1 - targetTri.B.x - targetTri.B.y) / targetTri.B.y]
+                    ];
+                    const P_inv = invert3x3(P_matrix);
+                    const req_Y_RGB = multiplyMatrixVector(P_inv, XYZ_W);
+                    
+                    tgt_Y_R = req_Y_RGB[0];
+                    tgt_Y_G = req_Y_RGB[1];
+                    tgt_Y_B = req_Y_RGB[2];
+
+                    M_T = buildMatrix(targetTri.R, targetTri.G, targetTri.B, tgt_Y_R, tgt_Y_G, tgt_Y_B);
+
+                } else {
+                    // NovaStar 模式：直接以螢幕 A 滿載時的原生 XYZ 發光量之和作為白點 W_native
+                    const W_native = [
+                        M_A[0][0] + M_A[0][1] + M_A[0][2],
+                        M_A[1][0] + M_A[1][1] + M_A[1][2],
+                        M_A[2][0] + M_A[2][1] + M_A[2][2]
+                    ];
+
+                    const tr = xyY_to_XYZ(targetTri.R.x, targetTri.R.y, targetTri.R.y);
+                    const tg = xyY_to_XYZ(targetTri.G.x, targetTri.G.y, targetTri.G.y);
+                    const tb = xyY_to_XYZ(targetTri.B.x, targetTri.B.y, targetTri.B.y);
+                    const P_tgt = [ [tr[0], tg[0], tb[0]], [tr[1], tg[1], tb[1]], [tr[2], tg[2], tb[2]] ];
+
+                    // 逆推縮放係數 S
+                    const S = multiplyMatrixVector(invert3x3(P_tgt), W_native);
+                    M_T = [
+                        [P_tgt[0][0]*S[0], P_tgt[0][1]*S[1], P_tgt[0][2]*S[2]],
+                        [P_tgt[1][0]*S[0], P_tgt[1][1]*S[1], P_tgt[1][2]*S[2]],
+                        [P_tgt[2][0]*S[0], P_tgt[2][1]*S[1], P_tgt[2][2]*S[2]]
+                    ];
+
+                    // 反推亮度用於表格顯示
+                    tgt_Y_R = M_T[1][0];
+                    tgt_Y_G = M_T[1][1];
+                    tgt_Y_B = M_T[1][2];
+                }
+
+                // 填入表格顯示
+                document.getElementById('t_r_cx_out').innerText = targetTri.R.x.toFixed(4);
+                document.getElementById('t_r_cy_out').innerText = targetTri.R.y.toFixed(4);
+                document.getElementById('t_r_y_out').innerText = tgt_Y_R.toFixed(1);
+                
+                document.getElementById('t_g_cx_out').innerText = targetTri.G.x.toFixed(4);
+                document.getElementById('t_g_cy_out').innerText = targetTri.G.y.toFixed(4);
+                document.getElementById('t_g_y_out').innerText = tgt_Y_G.toFixed(1);
+                
+                document.getElementById('t_b_cx_out').innerText = targetTri.B.x.toFixed(4);
+                document.getElementById('t_b_cy_out').innerText = targetTri.B.y.toFixed(4);
+                document.getElementById('t_b_y_out').innerText = tgt_Y_B.toFixed(1);
+
+                // 計算校正 CSC 矩陣
+                let CSC_A = multiply3x3(invert3x3(M_A), M_T);
+                let CSC_B = multiply3x3(invert3x3(M_B), M_T);
+
+                // 處理負數裁切與歸一化
+                const applyClippingAndNormalize = (mat) => {
+                    let outMat = [
+                        [mat[0][0], mat[0][1], mat[0][2]],
+                        [mat[1][0], mat[1][1], mat[1][2]],
+                        [mat[2][0], mat[2][1], mat[2][2]]
+                    ];
+                    
+                    const clip = document.getElementById('chk_clip').checked;
+                    const norm = document.getElementById('chk_normalize').checked;
+
+                    if (appState.matcherMode === 'novastar') {
+                        // 轉置後處理 columns (NovaStar 暫存器寫入格式)
+                        let UI_Matrix = [
+                            [mat[0][0], mat[1][0], mat[2][0]],
+                            [mat[0][1], mat[1][1], mat[2][1]],
+                            [mat[0][2], mat[1][2], mat[2][2]]
+                        ];
+                        if (clip) {
+                            for (let col = 0; col < 3; col++) {
+                                let sum = 0;
+                                for (let row = 0; row < 3; row++) {
+                                    if (UI_Matrix[row][col] < 0) UI_Matrix[row][col] = 0;
+                                    sum += UI_Matrix[row][col];
+                                }
+                                if (norm && sum > 0) {
+                                    for (let row = 0; row < 3; row++) UI_Matrix[row][col] /= sum;
+                                }
+                            }
+                        }
+                        outMat = UI_Matrix;
+                    } else {
+                        // 標準 RGB 空間處理
+                        if (clip) {
+                            for (let row = 0; row < 3; row++) {
+                                let sum = 0;
+                                for (let col = 0; col < 3; col++) {
+                                    if (outMat[row][col] < 0) outMat[row][col] = 0;
+                                    sum += outMat[row][col];
+                                }
+                                if (norm && sum > 0) {
+                                    for (let col = 0; col < 3; col++) outMat[row][col] /= sum;
+                                }
+                            }
+                        }
+                    }
+                    return outMat;
+                };
+
+                let final_A = applyClippingAndNormalize(CSC_A);
+                let final_B = applyClippingAndNormalize(CSC_B);
+
+                renderMatrixToUI(final_A, 'matrix-a-display');
+                renderMatrixToUI(final_B, 'matrix-b-display');
+
+            } catch (e) {
+                console.error(e);
+                errBox.classList.remove('hidden');
+            }
+        }
+
+        // 一鍵套用：將算出的交集色域丟到 Tab 1 做比對
+        function applyCommonTargetToAnalyzer() {
+            if (!appliedCommonTarget) return;
+            
+            // 開啟自定義色域比對
+            document.getElementById('gamut-Custom').checked = true;
+            toggleCustomGamutPanel();
+
+            document.getElementById('c-rx').value = appliedCommonTarget.R.x.toFixed(4);
+            document.getElementById('c-ry').value = appliedCommonTarget.R.y.toFixed(4);
+            document.getElementById('c-gx').value = appliedCommonTarget.G.x.toFixed(4);
+            document.getElementById('c-gy').value = appliedCommonTarget.G.y.toFixed(4);
+            document.getElementById('c-bx').value = appliedCommonTarget.B.x.toFixed(4);
+            document.getElementById('c-by').value = appliedCommonTarget.B.y.toFixed(4);
+
+            switchTab('analyzer');
+            updateAnalyzer();
+        }
+
+
+        // ==================== 全域狀態與事件綁定 ====================
+
+        function switchTab(tabId) {
+            appState.currentTab = tabId;
+            
+            // 隱藏全部
+            document.getElementById('tab-analyzer').classList.add('hidden');
+            document.getElementById('tab-matcher').classList.add('hidden');
+            document.getElementById('tab-principles').classList.add('hidden');
+            
+            // 移除按鈕高亮
+            document.getElementById('tab-analyzer-btn').classList.remove('bg-brand-600', 'text-white');
+            document.getElementById('tab-analyzer-btn').classList.add('text-slate-400');
+            document.getElementById('tab-matcher-btn').classList.remove('bg-brand-600', 'text-white');
+            document.getElementById('tab-matcher-btn').classList.add('text-slate-400');
+            document.getElementById('tab-principles-btn').classList.remove('bg-brand-600', 'text-white');
+            document.getElementById('tab-principles-btn').classList.add('text-slate-400');
+
+            // 顯示當前與按鈕高亮
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('tab-' + tabId + '-btn').classList.add('bg-brand-600', 'text-white');
+            document.getElementById('tab-' + tabId + '-btn').classList.remove('text-slate-400');
+
+            // 重新載入 Plotly/Canvas 防跑版
+            if (tabId === 'analyzer') {
+                updateAnalyzer();
+            } else if (tabId === 'matcher') {
+                runMatcher();
+            }
+            
+            // 重刷 Lucide Icons
+            lucide.createIcons();
+        }
+
+        function handleColorSpaceChange(space) {
+            appState.colorSpace = space;
+            updateAnalyzer();
+            runMatcher();
+        }
+
+        function getVal(id) {
+            const val = parseFloat(document.getElementById(id).value);
+            return isNaN(val) ? 0 : val;
+        }
+
+        // 自動綁定滑輪增減數值事件
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                const step = parseFloat(this.getAttribute('step')) || (this.id.includes('cx') || this.id.includes('cy') ? 0.001 : 1.0);
+                const direction = e.deltaY < 0 ? 1 : -1;
+                const decimals = step < 1 ? (step.toString().split('.')[1] || '').length : 0;
+                this.value = (parseFloat(this.value) + direction * step).toFixed(decimals);
+                
+                if (appState.currentTab === 'analyzer') updateAnalyzer();
+                else if (appState.currentTab === 'matcher') runMatcher();
+            });
+            input.addEventListener('input', function() {
+                if (appState.currentTab === 'analyzer') updateAnalyzer();
+                else if (appState.currentTab === 'matcher') runMatcher();
+            });
+        });
+
+        // 初始載入
+        window.onload = function() {
+            lucide.createIcons();
+            updateAnalyzer();
+        };
+    </script>
+</body>
+</html>

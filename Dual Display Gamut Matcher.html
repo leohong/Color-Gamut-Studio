@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <!-- 
+    =======================================================================
+    📜 版本變更紀錄 (Changelog):
+    v1.3 - 建立版號管理規範，並在原始碼頂部與 UI 介面底部新增變更項目區塊。
+    v1.2 - 實作 Canvas 畫布滑鼠直接拖拉端點 (Drag & Drop) 功能；Target RGB 顯示改為表格排列。
+    v1.1 - 引入白點 (White Point) 聯立反推演算法，避免硬體裁切 (Clipping) 並確保色溫對齊。
+    v1.0 - 建立基礎雙螢幕色域輸入、交集多邊形計算、最大內接三角形尋找與 CSC 反矩陣計算引擎。
+    =======================================================================
+    -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Display Gamut Matcher v1.3 (Interactive Canvas)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        input[type="number"] {
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 80px;
+            font-family: monospace;
+            font-size: 13px;
+            text-align: right;
+            transition: all 0.2s ease;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 1px #3b82f6;
+        }
+        /* 當被拖拉時高亮對應輸入框 */
+        input[type="number"].highlight-input {
+            background-color: #3b82f633;
+            border-color: #3b82f6;
+        }
+        .color-label {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .matrix-cell {
+            background: #0f172a;
+            padding: 8px;
+            border-radius: 4px;
+            min-width: 90px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #334155;
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        #gamutCanvas {
+            touch-action: none; /* 防止手機瀏覽器滑動干擾拖拉 */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen flex flex-col items-center">
+
+    <div class="w-full max-w-6xl bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700">
+        
+        <!-- Header -->
+        <div class="bg-slate-900 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-slate-100">
+                Dual Display Gamut Matcher 
+                <span class="text-amber-400 text-lg ml-2 font-mono">v1.3</span>
+                <span class="text-sm font-normal text-slate-400 ml-2">(支援畫布直接拖拉端點)</span>
+            </h2>
+        </div>
+
+        <div class="p-6">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- 左側：輸入區 -->
+                <div class="flex flex-col gap-6">
+                    <!-- Screen A -->
+                    <div class="bg-slate-900/50 p-4 rounded-lg border border-red-900/50">
+                        <h3 class="text-red-400 font-bold mb-3 border-b border-red-900/50 pb-2">Screen A (Original)</h3>
+                        <div class="flex items-center mb-1 text-xs text-slate-400 pl-[80px]">
+                            <div class="w-[90px] text-center">Y (亮度)</div>
+                            <div class="w-[90px] text-center">Cx</div>
+                            <div class="w-[90px] text-center">Cy</div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-red-500"></span>Red</div><div class="w-[90px] text-center"><input type="number" id="a_r_y" value="900" step="1"></div><div class="w-[90px] text-center"><input type="number" id="a_r_cx" value="0.680" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="a_r_cy" value="0.310" step="0.001"></div></div>
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-green-500"></span>Green</div><div class="w-[90px] text-center"><input type="number" id="a_g_y" value="1800" step="1"></div><div class="w-[90px] text-center"><input type="number" id="a_g_cx" value="0.190" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="a_g_cy" value="0.740" step="0.001"></div></div>
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-blue-500"></span>Blue</div><div class="w-[90px] text-center"><input type="number" id="a_b_y" value="300" step="1"></div><div class="w-[90px] text-center"><input type="number" id="a_b_cx" value="0.150" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="a_b_cy" value="0.050" step="0.001"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- Screen B -->
+                    <div class="bg-slate-900/50 p-4 rounded-lg border border-green-900/50">
+                        <h3 class="text-green-400 font-bold mb-3 border-b border-green-900/50 pb-2">Screen B (Original)</h3>
+                        <div class="flex items-center mb-1 text-xs text-slate-400 pl-[80px]">
+                            <div class="w-[90px] text-center">Y (亮度)</div>
+                            <div class="w-[90px] text-center">Cx</div>
+                            <div class="w-[90px] text-center">Cy</div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-red-500"></span>Red</div><div class="w-[90px] text-center"><input type="number" id="b_r_y" value="850" step="1"></div><div class="w-[90px] text-center"><input type="number" id="b_r_cx" value="0.640" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="b_r_cy" value="0.330" step="0.001"></div></div>
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-green-500"></span>Green</div><div class="w-[90px] text-center"><input type="number" id="b_g_y" value="1700" step="1"></div><div class="w-[90px] text-center"><input type="number" id="b_g_cx" value="0.300" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="b_g_cy" value="0.600" step="0.001"></div></div>
+                            <div class="flex items-center"><div class="w-[80px] flex items-center text-sm"><span class="color-label bg-blue-500"></span>Blue</div><div class="w-[90px] text-center"><input type="number" id="b_b_y" value="280" step="1"></div><div class="w-[90px] text-center"><input type="number" id="b_b_cx" value="0.150" step="0.001"></div><div class="w-[90px] text-center"><input type="number" id="b_b_cy" value="0.060" step="0.001"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- Target White Point -->
+                    <div class="bg-blue-900/20 p-4 rounded-lg border border-blue-500/50">
+                        <h3 class="text-white font-bold mb-3 border-b border-blue-500/50 pb-2">Target White Point (目標色溫與總亮度)</h3>
+                        <div class="flex items-center mb-1 text-xs text-slate-400 pl-[80px]">
+                            <div class="w-[90px] text-center">Y (總亮度)</div>
+                            <div class="w-[90px] text-center">Cx</div>
+                            <div class="w-[90px] text-center">Cy</div>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-[80px] flex items-center text-sm font-bold"><span class="color-label bg-white border border-slate-400"></span>White</div>
+                            <div class="w-[90px] text-center"><input type="number" id="t_w_y" value="500" step="10" class="border-blue-400 text-blue-200" title="可自訂目標亮度"></div>
+                            <div class="w-[90px] text-center"><input type="number" id="t_w_cx" value="0.3127" step="0.001" class="border-blue-400 text-blue-200" title="D65 x"></div>
+                            <div class="w-[90px] text-center"><input type="number" id="t_w_cy" value="0.3290" step="0.001" class="border-blue-400 text-blue-200" title="D65 y"></div>
+                        </div>
+                        <p class="text-[11px] text-blue-300 mt-2">* 預設 Cx: 0.3127, Cy: 0.3290 為標準 D65 (6500K) 色溫。<br>* Y (總亮度) 建議設定為兩台螢幕中「較暗那一台」的最高亮度。</p>
+                    </div>
+
+                </div>
+
+                <!-- 右側：Canvas 繪圖 -->
+                <div class="flex flex-col items-center bg-black rounded-lg border border-slate-700 p-4 relative min-h-[400px]">
+                    <div class="w-full text-center text-amber-300 text-sm mb-2 animate-pulse flex justify-center items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                        您可以直接在畫布上拖拉端點來調整顏色座標
+                    </div>
+                    <canvas id="gamutCanvas" width="450" height="450" class="bg-black rounded border border-slate-800"></canvas>
+                    <div class="absolute top-12 right-6 bg-slate-900/90 p-3 rounded border border-slate-700 text-xs text-slate-300 pointer-events-none">
+                        <div class="flex items-center mb-1"><span class="w-4 h-0.5 bg-red-500 mr-2"></span> Screen A</div>
+                        <div class="flex items-center mb-1"><span class="w-4 h-0.5 bg-green-500 mr-2"></span> Screen B</div>
+                        <div class="flex items-center mb-1"><span class="w-4 h-0.5 bg-cyan-400 mr-2"></span> <span class="w-3 h-3 bg-cyan-400/30 rounded-sm mr-1 border border-cyan-400"></span> Common Target</div>
+                        <div class="flex items-center mt-2"><span class="w-2 h-2 rounded-full bg-white mr-2 border border-black"></span> Target White Point</div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-slate-700 mb-6">
+
+            <!-- 演算法算出的共同目標 -->
+            <div class="bg-slate-900 rounded-lg p-5 border border-cyan-700/50 shadow-[0_0_15px_rgba(6,182,212,0.1)] mb-6">
+                <h3 class="text-cyan-400 font-bold text-lg mb-4 flex justify-between items-center">
+                    <span>1. Calculated Common Target Gamut (白點平衡反算)</span>
+                    <span class="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-1 rounded">White-Point Balanced</span>
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-center text-sm text-slate-300 border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-700/80">
+                                <th class="pb-2 text-left pl-4 w-[120px]">Target Color</th>
+                                <th class="pb-2 w-[100px]">Y (亮度)</th>
+                                <th class="pb-2 w-[100px]">Cx</th>
+                                <th class="pb-2 w-[100px]">Cy</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700/50">
+                            <tr>
+                                <td class="py-3 text-left pl-4 font-bold text-red-400 flex items-center"><span class="color-label bg-red-500"></span>Red</td>
+                                <td class="py-3 font-mono" id="t_r_y_out">-</td>
+                                <td class="py-3 font-mono" id="t_r_cx_out">-</td>
+                                <td class="py-3 font-mono" id="t_r_cy_out">-</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 text-left pl-4 font-bold text-green-400 flex items-center"><span class="color-label bg-green-500"></span>Green</td>
+                                <td class="py-3 font-mono" id="t_g_y_out">-</td>
+                                <td class="py-3 font-mono" id="t_g_cx_out">-</td>
+                                <td class="py-3 font-mono" id="t_g_cy_out">-</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 text-left pl-4 font-bold text-blue-400 flex items-center"><span class="color-label bg-blue-500"></span>Blue</td>
+                                <td class="py-3 font-mono" id="t_b_y_out">-</td>
+                                <td class="py-3 font-mono" id="t_b_cx_out">-</td>
+                                <td class="py-3 font-mono" id="t_b_cy_out">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-slate-400 text-center mt-4 p-2 bg-slate-800 rounded">
+                    * Y 亮度是由演算法透過目標白點 XYZ 反算得出。為了完美混出指定的 Target White，系統利用線性代數解算出各通道嚴格需要的相對亮度。
+                </p>
+            </div>
+
+            <!-- CSC 矩陣結果區 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                
+                <!-- Matrix A -->
+                <div class="bg-slate-900 rounded-lg p-5 border border-red-900/50 shadow-[0_0_15px_rgba(239,68,68,0.05)]">
+                    <h3 class="text-red-400 font-bold mb-4 text-center">2. CSC Matrix for Screen A</h3>
+                    <div id="matrix-a-display" class="flex flex-col items-center gap-2"></div>
+                </div>
+
+                <!-- Matrix B -->
+                <div class="bg-slate-900 rounded-lg p-5 border border-green-900/50 shadow-[0_0_15px_rgba(34,197,94,0.05)]">
+                    <h3 class="text-green-400 font-bold mb-4 text-center">3. CSC Matrix for Screen B</h3>
+                    <div id="matrix-b-display" class="flex flex-col items-center gap-2"></div>
+                </div>
+
+            </div>
+            
+            <p id="error-msg" class="text-red-500 text-center mt-6 hidden font-bold">Error: Cannot calculate intersection or invalid white point.</p>
+
+            <!-- 📖 演算法白話文說明區塊 -->
+            <div class="bg-slate-700/30 rounded-lg p-5 border border-slate-600 mt-12 shadow-inner">
+                <h3 class="text-lg font-bold text-amber-400 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    演算法白話文說明：系統在背後做了什麼？
+                </h3>
+                <div class="space-y-4 text-sm text-slate-300 leading-relaxed">
+                    <p>
+                        <strong class="text-white text-base">第一步：尋找「色彩交集」與「最大三角形」</strong><br>
+                        兩台不同型號的螢幕，能顯示的極限顏色不同（圖上紅色與綠色的大三角形）。為了讓它們顯示<span class="text-cyan-300 font-bold">完全一模一樣的顏色</span>，我們必須找出它們重疊的區域。但因為螢幕只能靠「紅、綠、藍」三個點來發光，所以系統會在這個不規則的重疊形狀裡，自動計算出一個<span class="text-cyan-300 font-bold">「面積最大的三角形」</span>（圖上的淺藍色區域）。這個新三角形，就是兩台螢幕都能輕鬆達到的「共同色彩標準」。
+                    </p>
+                    <p>
+                        <strong class="text-white text-base">第二步：為什麼需要自訂「白點亮度(Y)」？</strong><br>
+                        因為每台螢幕的「物理極限」不同。如果螢幕 A 最亮可以到 1000 nits，螢幕 B 最亮只能到 400 nits，若不手動統一設定目標，強制系統跑到高亮度會讓螢幕 B 發生嚴重的裁切（Clipping）與色偏。實務上，我們通常會將白點總亮度 (Y) 設定為<span class="text-amber-200">「兩台螢幕中較暗那一台的最高亮度（或更低）」</span>(例如 400)。確保雙方都有能力完美呈現。
+                    </p>
+                    <p>
+                        <strong class="text-white text-base">第三步：白點平衡 (White Point Balance)</strong><br>
+                        確定好目標白點（如標準光 D65）與安全亮度後，系統會利用「線性代數」的數學反推法：<span class="text-amber-200">「為了混出這個完美的標準白光，剛才找出的共同紅、綠、藍各自到底需要貢獻多少亮度？」</span>系統精準算出比例後，未來兩台螢幕顯示白色或灰階時，就不會出現一台偏黃、一台偏藍的問題了。
+                    </p>
+                    <p>
+                        <strong class="text-white text-base">第四步：產生 CSC 翻譯矩陣 (Color Space Conversion)</strong><br>
+                        最後算出來上方的那兩個 3x3 數字方塊（Matrix A 與 Matrix B），就是寫入螢幕硬體晶片的<span class="text-pink-300 font-bold">「翻譯對照表」</span>。它的數學原理是把<code class="bg-slate-800 px-1 rounded text-pink-200">反轉後的原始螢幕發光矩陣 × 目標色彩矩陣</code>。有了這份翻譯表，當電腦送出標準顏色的訊號時，螢幕 A 和 B 就會各自看懂對照表，自動調整電壓，最終兩台螢幕就能打出肉眼看起來完全同步的光線！
+                    </p>
+                </div>
+            </div>
+
+            <!-- 📜 版本變更紀錄 (Changelog) -->
+            <div class="bg-slate-800/80 rounded-lg p-5 border border-slate-700 mt-6 shadow-inner text-slate-400 text-sm">
+                <h4 class="font-bold text-slate-300 mb-3 border-b border-slate-700 pb-2">📜 版本變更紀錄 (Changelog)</h4>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong class="text-slate-200">v1.3:</strong> 建立版號管理規範，並在原始碼與 UI 中新增變更項目紀錄。</li>
+                    <li><strong class="text-slate-200">v1.2:</strong> 實作 Canvas 畫布滑鼠直接拖拉端點功能，實現所見即所得；Target RGB 顯示改為表格排列。</li>
+                    <li><strong class="text-slate-200">v1.1:</strong> 加入白點 (White Point) 聯立反推演算法，避免硬體裁切 (Clipping) 並確保色溫一致。</li>
+                    <li><strong class="text-slate-200">v1.0:</strong> 建立基礎雙螢幕色域輸入、交集多邊形計算、最大內接三角形與 CSC 反矩陣計算引擎。</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    const inputs = document.querySelectorAll('input[type="number"]');
+    inputs.forEach(input => {
+        input.addEventListener('input', runEngine);
+        input.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            const step = parseFloat(this.getAttribute('step')) || 1;
+            const direction = e.deltaY < 0 ? 1 : -1;
+            this.value = (parseFloat(this.value) + direction * step).toFixed(step < 1 ? 3 : 0);
+            runEngine();
+        });
+    });
+
+    function getVal(id) {
+        const val = parseFloat(document.getElementById(id).value);
+        return isNaN(val) ? 0 : val;
+    }
+
+    /* =====================================================================
+       核心色彩科學與數學演算法 
+       ===================================================================== */
+    
+    function xyY_to_XYZ(x, y, Y) {
+        if (Math.abs(y) < 0.0001) throw new Error("Cy 不能為 0 (除以零錯誤)");
+        return [(x * Y) / y, Y, ((1 - x - y) * Y) / y];
+    }
+
+    function invert3x3(m) {
+        let det = m[0][0]*(m[1][1]*m[2][2] - m[2][1]*m[1][2]) 
+                - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0]) 
+                + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+        if (Math.abs(det) < 1e-9) throw new Error("Singular Matrix (奇異矩陣無法反轉)");
+        return [
+            [(m[1][1]*m[2][2] - m[2][1]*m[1][2])/det, (m[0][2]*m[2][1] - m[0][1]*m[2][2])/det, (m[0][1]*m[1][2] - m[0][2]*m[1][1])/det],
+            [(m[1][2]*m[2][0] - m[1][0]*m[2][2])/det, (m[0][0]*m[2][2] - m[0][2]*m[2][0])/det, (m[1][0]*m[0][2] - m[0][0]*m[1][2])/det],
+            [(m[1][0]*m[2][1] - m[2][0]*m[1][1])/det, (m[2][0]*m[0][1] - m[0][0]*m[2][1])/det, (m[0][0]*m[1][1] - m[1][0]*m[0][1])/det]
+        ];
+    }
+
+    function multiply3x3(a, b) {
+        let res = [[0,0,0], [0,0,0], [0,0,0]];
+        for (let i = 0; i < 3; i++)
+            for (let j = 0; j < 3; j++)
+                res[i][j] = a[i][0]*b[0][j] + a[i][1]*b[1][j] + a[i][2]*b[2][j];
+        return res;
+    }
+
+    function multiplyMatrixVector(m, v) {
+        return [
+            m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2],
+            m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2],
+            m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2]
+        ];
+    }
+
+    function sortCCW(pts) {
+        let cx = 0, cy = 0;
+        pts.forEach(p => { cx += p.x; cy += p.y; });
+        cx /= pts.length; cy /= pts.length;
+        return pts.slice().sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+    }
+
+    function intersectPolygons(poly1, poly2) {
+        let outputList = sortCCW(poly1);
+        let clipPoly = sortCCW(poly2);
+        
+        for (let i = 0; i < clipPoly.length; i++) {
+            let nextList = [];
+            let start = clipPoly[i];
+            let end = clipPoly[(i + 1) % clipPoly.length];
+
+            let isInside = (p) => (end.x - start.x) * (p.y - start.y) - (end.y - start.y) * (p.x - start.x) >= 0;
+
+            let getIntersection = (p1, p2) => {
+                let dx1 = end.x - start.x, dy1 = end.y - start.y;
+                let dx2 = p2.x - p1.x, dy2 = p2.y - p1.y;
+                let det = dx1 * dy2 - dy1 * dx2;
+                if (Math.abs(det) < 1e-9) return p1;
+                let t = ((p1.x - start.x) * dy2 - (p1.y - start.y) * dx2) / det;
+                return { x: start.x + t * dx1, y: start.y + t * dy1 };
+            };
+
+            for (let j = 0; j < outputList.length; j++) {
+                let curr = outputList[j];
+                let prev = outputList[(j + outputList.length - 1) % outputList.length];
+
+                if (isInside(curr)) {
+                    if (!isInside(prev)) nextList.push(getIntersection(prev, curr));
+                    nextList.push(curr);
+                } else if (isInside(prev)) {
+                    nextList.push(getIntersection(prev, curr));
+                }
+            }
+            outputList = nextList;
+        }
+        return outputList;
+    }
+
+    function triangleArea(p1, p2, p3) {
+        return Math.abs((p1.x*(p2.y-p3.y) + p2.x*(p3.y-p1.y) + p3.x*(p1.y-p2.y))/2);
+    }
+
+    function findTargetGamut(intersectionPoly) {
+        if (intersectionPoly.length < 3) return null;
+        if (intersectionPoly.length === 3) return classifyRGB(intersectionPoly);
+
+        let maxArea = 0;
+        let bestTri = null;
+        let n = intersectionPoly.length;
+        
+        for(let i=0; i<n-2; i++) {
+            for(let j=i+1; j<n-1; j++) {
+                for(let k=j+1; k<n; k++) {
+                    let area = triangleArea(intersectionPoly[i], intersectionPoly[j], intersectionPoly[k]);
+                    if (area > maxArea) {
+                        maxArea = area;
+                        bestTri = [intersectionPoly[i], intersectionPoly[j], intersectionPoly[k]];
+                    }
+                }
+            }
+        }
+        return classifyRGB(bestTri);
+    }
+
+    function classifyRGB(pts) {
+        let p = [...pts];
+        p.sort((a,b) => b.x - a.x);
+        let red = p[0];
+        let remaining = [p[1], p[2]];
+        remaining.sort((a,b) => b.y - a.y);
+        let green = remaining[0]; 
+        let blue = remaining[1];  
+        return { R: red, G: green, B: blue };
+    }
+
+
+    /* =====================================================================
+       Canvas 繪圖邏輯與拖放支援 (Drawing & Drag-and-Drop)
+       ===================================================================== */
+    const MAX_COORD = 0.9;
+    const padding = 40;
+    const canvasObj = document.getElementById('gamutCanvas');
+
+    // 映射函數：數值(0~0.9) 轉 像素座標
+    function mapX(v, canvas) { return padding + (v / MAX_COORD) * (canvas.width - padding * 2); }
+    function mapY(v, canvas) { return canvas.height - padding - (v / MAX_COORD) * (canvas.height - padding * 2); }
+    // 反向映射：像素座標 轉 數值(0~0.9)
+    function unmapX(px, canvas) { return ((px - padding) / (canvas.width - padding * 2)) * MAX_COORD; }
+    function unmapY(py, canvas) { return ((canvas.height - padding - py) / (canvas.height - padding * 2)) * MAX_COORD; }
+
+    function drawSystem(polyA, polyB, intersection, targetTri, targetWhite) {
+        const canvas = document.getElementById('gamutCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width, height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+
+        const gW = width - padding * 2, gH = height - padding * 2;
+
+        // 畫格線 (Grid)
+        ctx.strokeStyle = '#334155'; ctx.fillStyle = '#64748b'; ctx.font = '10px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        for(let i = 0; i <= MAX_COORD; i += 0.1) {
+            let v = i.toFixed(1), x = mapX(i, canvas), y = mapY(i, canvas);
+            ctx.beginPath(); ctx.moveTo(x, padding); ctx.lineTo(x, height - padding); ctx.stroke();
+            if (i > 0) ctx.fillText(v, x, height - padding + 5);
+            ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(width - padding, y); ctx.stroke();
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            if (i > 0) ctx.fillText(v, padding - 5, y);
+            ctx.textAlign = 'center';
+        }
+        ctx.strokeStyle = '#94a3b8'; ctx.strokeRect(padding, padding, gW, gH);
+
+        // 輔助函式: 畫多邊形
+        const drawPoly = (pts, strokeColor, fillColor = null, isDashed = false) => {
+            if (!pts || pts.length < 3) return;
+            ctx.beginPath();
+            ctx.moveTo(mapX(pts[0].x, canvas), mapY(pts[0].y, canvas));
+            for(let i=1; i<pts.length; i++) ctx.lineTo(mapX(pts[i].x, canvas), mapY(pts[i].y, canvas));
+            ctx.closePath();
+            
+            if (fillColor) { ctx.fillStyle = fillColor; ctx.fill(); }
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 2;
+            ctx.setLineDash(isDashed ? [5, 5] : []);
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            // 如果是螢幕A或B，畫上可以被拖拉的明顯控制點
+            if (isDashed) {
+                pts.forEach(p => {
+                    ctx.fillStyle = strokeColor;
+                    ctx.beginPath(); 
+                    ctx.arc(mapX(p.x, canvas), mapY(p.y, canvas), 6, 0, Math.PI*2); // 放大端點提示可拖拉
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+        };
+
+        // 畫螢幕 A(紅) & 螢幕 B(綠) 的虛線三角形
+        drawPoly(polyA, '#ef4444', null, true);
+        drawPoly(polyB, '#22c55e', null, true);
+
+        // 畫交集目標(淺藍色) 實心三角形與端點
+        if (targetTri) {
+            drawPoly([targetTri.R, targetTri.G, targetTri.B], '#22d3ee', 'rgba(34, 211, 238, 0.2)', false);
+            [targetTri.R, targetTri.G, targetTri.B].forEach(p => {
+                ctx.fillStyle = '#22d3ee';
+                ctx.beginPath(); ctx.arc(mapX(p.x, canvas), mapY(p.y, canvas), 4, 0, Math.PI*2); ctx.fill();
+            });
+        }
+
+        // 畫目標白點 (白色十字標記)
+        if (targetWhite) {
+            let wx = mapX(targetWhite.x, canvas), wy = mapY(targetWhite.y, canvas);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(wx, wy, 5, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = '#cbd5e1'; ctx.font = '11px monospace'; ctx.textAlign = 'left';
+            ctx.fillText(` W(${targetWhite.x.toFixed(3)}, ${targetWhite.y.toFixed(3)})`, wx + 6, wy - 6);
+        }
+    }
+
+    function renderMatrix(matrixData, elementId) {
+        const el = document.getElementById(elementId);
+        el.innerHTML = matrixData.map(row => 
+            `<div class="flex gap-2 mb-1">
+                <div class="matrix-cell text-red-300">${row[0].toFixed(5)}</div>
+                <div class="matrix-cell text-green-300">${row[1].toFixed(5)}</div>
+                <div class="matrix-cell text-blue-300">${row[2].toFixed(5)}</div>
+            </div>`
+        ).join('');
+    }
+
+
+    /* =====================================================================
+       滑鼠拖放邏輯 (Drag and Drop Setup)
+       ===================================================================== */
+    let isDragging = false;
+    let dragTargetId = null; // 紀錄正在拖拉的點的前綴，例如 'a_r', 'b_g'
+
+    // 取得所有控制點的目前數值與對應的 DOM ID
+    function getControlPoints() {
+        return [
+            { id: 'a_r', cx: getVal('a_r_cx'), cy: getVal('a_r_cy') },
+            { id: 'a_g', cx: getVal('a_g_cx'), cy: getVal('a_g_cy') },
+            { id: 'a_b', cx: getVal('a_b_cx'), cy: getVal('a_b_cy') },
+            { id: 'b_r', cx: getVal('b_r_cx'), cy: getVal('b_r_cy') },
+            { id: 'b_g', cx: getVal('b_g_cx'), cy: getVal('b_g_cy') },
+            { id: 'b_b', cx: getVal('b_b_cx'), cy: getVal('b_b_cy') }
+        ];
+    }
+
+    // 取得滑鼠在 Canvas 內的相對座標
+    function getMousePos(canvas, evt) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+            x: (evt.clientX - rect.left) * scaleX,
+            y: (evt.clientY - rect.top) * scaleY
+        };
+    }
+
+    canvasObj.addEventListener('mousedown', function(evt) {
+        const mousePos = getMousePos(canvasObj, evt);
+        const points = getControlPoints();
+        const hitRadius = 15; // 判斷點擊的寬容半徑
+
+        for (let p of points) {
+            const px = mapX(p.cx, canvasObj);
+            const py = mapY(p.cy, canvasObj);
+            // 計算滑鼠座標與端點的距離
+            if (Math.hypot(mousePos.x - px, mousePos.y - py) < hitRadius) {
+                isDragging = true;
+                dragTargetId = p.id;
+                canvasObj.style.cursor = 'grabbing';
+                // 標記左側輸入框高亮
+                document.getElementById(p.id + '_cx').classList.add('highlight-input');
+                document.getElementById(p.id + '_cy').classList.add('highlight-input');
+                break;
+            }
+        }
+    });
+
+    canvasObj.addEventListener('mousemove', function(evt) {
+        const mousePos = getMousePos(canvasObj, evt);
+
+        if (isDragging && dragTargetId) {
+            // 計算新的數值座標
+            let newCx = unmapX(mousePos.x, canvasObj);
+            let newCy = unmapY(mousePos.y, canvasObj);
+
+            // 限制拖拉範圍在 0 ~ 0.9 之間，避免 Cy 跑到負數或 0
+            newCx = Math.max(0, Math.min(0.9, newCx));
+            newCy = Math.max(0.001, Math.min(0.9, newCy));
+
+            // 更新左側對應的輸入框數值
+            document.getElementById(dragTargetId + '_cx').value = newCx.toFixed(3);
+            document.getElementById(dragTargetId + '_cy').value = newCy.toFixed(3);
+
+            // 觸發運算引擎，達到即時重繪效果
+            runEngine();
+        } else {
+            // Hover 效果判斷
+            const points = getControlPoints();
+            let isHovering = false;
+            for (let p of points) {
+                const px = mapX(p.cx, canvasObj);
+                const py = mapY(p.cy, canvasObj);
+                if (Math.hypot(mousePos.x - px, mousePos.y - py) < 15) {
+                    isHovering = true;
+                    break;
+                }
+            }
+            canvasObj.style.cursor = isHovering ? 'grab' : 'default';
+        }
+    });
+
+    function stopDragging() {
+        if (isDragging && dragTargetId) {
+            document.getElementById(dragTargetId + '_cx').classList.remove('highlight-input');
+            document.getElementById(dragTargetId + '_cy').classList.remove('highlight-input');
+        }
+        isDragging = false;
+        dragTargetId = null;
+        canvasObj.style.cursor = 'default';
+    }
+
+    canvasObj.addEventListener('mouseup', stopDragging);
+    canvasObj.addEventListener('mouseleave', stopDragging);
+
+
+    /* =====================================================================
+       主引擎流程 (Main Engine Execution)
+       ===================================================================== */
+
+    function runEngine() {
+        const errBox = document.getElementById('error-msg');
+        errBox.classList.add('hidden'); // 先隱藏錯誤提示
+
+        try {
+            // 步驟 1: 收集原色資料
+            const polyA = [
+                {x: getVal('a_r_cx'), y: getVal('a_r_cy'), Y: getVal('a_r_y'), ch: 'R'},
+                {x: getVal('a_g_cx'), y: getVal('a_g_cy'), Y: getVal('a_g_y'), ch: 'G'},
+                {x: getVal('a_b_cx'), y: getVal('a_b_cy'), Y: getVal('a_b_y'), ch: 'B'}
+            ];
+            const polyB = [
+                {x: getVal('b_r_cx'), y: getVal('b_r_cy'), Y: getVal('b_r_y'), ch: 'R'},
+                {x: getVal('b_g_cx'), y: getVal('b_g_cy'), Y: getVal('b_g_y'), ch: 'G'},
+                {x: getVal('b_b_cx'), y: getVal('b_b_cy'), Y: getVal('b_b_y'), ch: 'B'}
+            ];
+
+            const tgt_w_cx = getVal('t_w_cx');
+            const tgt_w_cy = getVal('t_w_cy');
+            const tgt_w_y = getVal('t_w_y');
+
+            // 步驟 2: 色域交集與共同目標
+            const intersection = intersectPolygons(polyA, polyB);
+            const targetTri = findTargetGamut(intersection);
+
+            // 更新畫布上的色域圖形 (不論後續矩陣是否出錯，先更新圖形讓拖曳時有反應)
+            drawSystem(polyA, polyB, intersection, targetTri, {x: tgt_w_cx, y: tgt_w_cy});
+
+            if (!targetTri) throw new Error("No valid intersection.");
+
+            // 步驟 3: 白點平衡 (White Point Balance)
+            const XYZ_W = xyY_to_XYZ(tgt_w_cx, tgt_w_cy, tgt_w_y);
+
+            const P_matrix = [
+                [targetTri.R.x / targetTri.R.y, targetTri.G.x / targetTri.G.y, targetTri.B.x / targetTri.B.y],
+                [1, 1, 1], 
+                [(1 - targetTri.R.x - targetTri.R.y) / targetTri.R.y, (1 - targetTri.G.x - targetTri.G.y) / targetTri.G.y, (1 - targetTri.B.x - targetTri.B.y) / targetTri.B.y]
+            ];
+
+            const P_inv = invert3x3(P_matrix);
+            const req_Y_RGB = multiplyMatrixVector(P_inv, XYZ_W);
+            
+            const tgt_Y_R = req_Y_RGB[0];
+            const tgt_Y_G = req_Y_RGB[1];
+            const tgt_Y_B = req_Y_RGB[2];
+
+            document.getElementById('t_r_cx_out').innerText = targetTri.R.x.toFixed(3);
+            document.getElementById('t_r_cy_out').innerText = targetTri.R.y.toFixed(3);
+            document.getElementById('t_r_y_out').innerText = tgt_Y_R.toFixed(2);
+            
+            document.getElementById('t_g_cx_out').innerText = targetTri.G.x.toFixed(3);
+            document.getElementById('t_g_cy_out').innerText = targetTri.G.y.toFixed(3);
+            document.getElementById('t_g_y_out').innerText = tgt_Y_G.toFixed(2);
+            
+            document.getElementById('t_b_cx_out').innerText = targetTri.B.x.toFixed(3);
+            document.getElementById('t_b_cy_out').innerText = targetTri.B.y.toFixed(3);
+            document.getElementById('t_b_y_out').innerText = tgt_Y_B.toFixed(2);
+
+            // 步驟 4: 建立發光特徵矩陣
+            const buildMatrix = (r, g, b, yR, yG, yB) => {
+                const XYZ_R = xyY_to_XYZ(r.x, r.y, yR);
+                const XYZ_G = xyY_to_XYZ(g.x, g.y, yG);
+                const XYZ_B = xyY_to_XYZ(b.x, b.y, yB);
+                return [
+                    [XYZ_R[0], XYZ_G[0], XYZ_B[0]],
+                    [XYZ_R[1], XYZ_G[1], XYZ_B[1]],
+                    [XYZ_R[2], XYZ_G[2], XYZ_B[2]]
+                ];
+            };
+
+            const M_A = buildMatrix(polyA[0], polyA[1], polyA[2], polyA[0].Y, polyA[1].Y, polyA[2].Y);
+            const M_B = buildMatrix(polyB[0], polyB[1], polyB[2], polyB[0].Y, polyB[1].Y, polyB[2].Y);
+            const M_T = buildMatrix(targetTri.R, targetTri.G, targetTri.B, tgt_Y_R, tgt_Y_G, tgt_Y_B);
+
+            // 步驟 5: 計算色彩校正矩陣 CSC
+            const CSC_A = multiply3x3(invert3x3(M_A), M_T);
+            const CSC_B = multiply3x3(invert3x3(M_B), M_T);
+
+            // 步驟 6: 將算好的 3x3 CSC 矩陣渲染到網頁上
+            renderMatrix(CSC_A, 'matrix-a-display');
+            renderMatrix(CSC_B, 'matrix-b-display');
+
+        } catch (e) {
+            // 使用者拖拉導致交集不存在或無法求反矩陣時
+            errBox.classList.remove('hidden');
+        }
+    }
+
+    // 網頁載入完成後，自動執行第一次運算
+    window.onload = runEngine;
+</script>
+</body>
+</html>

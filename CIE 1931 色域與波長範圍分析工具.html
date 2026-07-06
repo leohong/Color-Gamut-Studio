@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIE 色域與波長範圍分析工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        
+        .gamut-checkbox {
+            appearance: none; width: 1rem; height: 1rem; border-radius: 0.25rem;
+            border: 1px solid #475569; background-color: #1e293b;
+            display: inline-grid; place-content: center; cursor: pointer;
+        }
+        .gamut-checkbox::before {
+            content: ""; width: 0.65em; height: 0.65em; transform: scale(0);
+            transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em var(--chk-color, #fff);
+            background-color: transform; transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+        .gamut-checkbox:checked::before { transform: scale(1); }
+
+        /* Radio 按鈕樣式 */
+        .space-radio:checked + label { background-color: #4f46e5; color: white; border-color: #4f46e5; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans p-4 md:p-8 min-h-screen">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- 標題區 -->
+        <header class="mb-8 border-b border-slate-700 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <h1 class="text-3xl font-bold text-white">LED 色差與色域分析工具</h1>
+                    <span class="bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded-md">v1.7.1 專業版</span>
+                </div>
+                <p class="text-slate-400">支援 CIE 1931/1976 空間切換，整合標準色域涵蓋率、MacAdam 色容差、主波長分析與 PWM 混光亮度試算。</p>
+            </div>
+            
+            <!-- 色彩空間切換開關 -->
+            <div class="flex bg-slate-800 p-1 rounded-lg border border-slate-700 shrink-0 h-fit">
+                <div class="relative">
+                    <input type="radio" id="space-1931" name="colorSpace" value="1931" class="hidden space-radio" checked onchange="updateChart()">
+                    <label for="space-1931" class="cursor-pointer px-4 py-2 text-sm font-semibold text-slate-400 rounded-md block transition-colors">CIE 1931 (x, y)</label>
+                </div>
+                <div class="relative">
+                    <input type="radio" id="space-1976" name="colorSpace" value="1976" class="hidden space-radio" onchange="updateChart()">
+                    <label for="space-1976" class="cursor-pointer px-4 py-2 text-sm font-semibold text-slate-400 rounded-md block transition-colors">CIE 1976 (u', v')</label>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- 左側控制面板 -->
+            <div class="w-full lg:w-1/3 flex flex-col gap-5">
+                
+                <!-- 1. 波長範圍與標準色域 -->
+                <div class="bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-700">
+                    <h2 class="text-lg font-semibold mb-3 border-b border-slate-700 pb-2 text-white">1. LED 批次波長設定 (nm)</h2>
+                    
+                    <div class="grid grid-cols-1 gap-3 mb-4">
+                        <div class="flex items-center justify-between">
+                            <label class="font-bold text-red-500 text-xs w-16">紅 (R)</label>
+                            <input type="number" id="r-min" value="620" min="600" max="700" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()"> <span class="text-slate-500">-</span>
+                            <input type="number" id="r-max" value="625" min="600" max="700" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <label class="font-bold text-green-500 text-xs w-16">綠 (G)</label>
+                            <input type="number" id="g-min" value="515" min="500" max="560" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()"> <span class="text-slate-500">-</span>
+                            <input type="number" id="g-max" value="535" min="500" max="560" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <label class="font-bold text-blue-500 text-xs w-16">藍 (B)</label>
+                            <input type="number" id="b-min" value="460" min="400" max="490" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()"> <span class="text-slate-500">-</span>
+                            <input type="number" id="b-max" value="475" min="400" max="490" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 text-white rounded text-center text-sm" onchange="updateChart()">
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-700 pt-3">
+                        <label class="block text-slate-400 text-xs mb-2">標準色域比對 (涵蓋率計算)</label>
+                        <div class="flex flex-wrap gap-x-3 gap-y-2 mb-2">
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #a855f7;"><input type="checkbox" id="gamut-sRGB" class="gamut-checkbox mr-1.5" onchange="updateChart()"> sRGB</label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #ec4899;"><input type="checkbox" id="gamut-NTSC" class="gamut-checkbox mr-1.5" onchange="updateChart()"> NTSC</label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #eab308;"><input type="checkbox" id="gamut-PAL" class="gamut-checkbox mr-1.5" onchange="updateChart()"> PAL</label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #06b6d4;"><input type="checkbox" id="gamut-AdobeRGB" class="gamut-checkbox mr-1.5" onchange="updateChart()"> Adobe RGB</label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #f97316;"><input type="checkbox" id="gamut-DCIP3" class="gamut-checkbox mr-1.5" onchange="updateChart()"> DCI-P3</label>
+                            <label class="flex items-center cursor-pointer text-xs font-medium hover:text-white" style="--chk-color: #10b981;"><input type="checkbox" id="gamut-Custom" class="gamut-checkbox mr-1.5" onchange="toggleCustomPanel(); updateChart()"> 自定義</label>
+                        </div>
+                        
+                        <!-- 自定義輸入區塊 -->
+                        <div id="custom-gamut-panel" class="hidden mb-2 mt-3 p-2 bg-slate-900 rounded-lg border border-slate-700">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-[11px] font-bold text-slate-300">自定義色域 (CIE x,y)</h3>
+                                <button onclick="presetRec2020()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded transition-colors">Rec.2020</button>
+                            </div>
+                            <div class="grid grid-cols-3 gap-1 text-[10px]">
+                                <div><label class="block text-red-400 mb-1">R</label><input type="number" id="c-rx" value="0.708" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center mb-1"><input type="number" id="c-ry" value="0.292" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center" onchange="updateChart()"></div>
+                                <div><label class="block text-green-400 mb-1">G</label><input type="number" id="c-gx" value="0.170" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center mb-1"><input type="number" id="c-gy" value="0.797" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center" onchange="updateChart()"></div>
+                                <div><label class="block text-blue-400 mb-1">B</label><input type="number" id="c-bx" value="0.131" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center mb-1"><input type="number" id="c-by" value="0.046" step="0.001" class="w-full bg-slate-800 border border-slate-600 rounded px-1 py-1 text-white text-center" onchange="updateChart()"></div>
+                            </div>
+                        </div>
+
+                        <div id="coverage-container" class="hidden bg-slate-900 rounded p-2 mt-2">
+                            <div class="grid grid-cols-4 gap-2 text-[10px] text-slate-400 font-semibold border-b border-slate-700 pb-1 mb-1">
+                                <div class="col-span-2">標準</div><div class="text-right">涵蓋率</div><div class="text-right">面積比</div>
+                            </div>
+                            <div id="coverage-results" class="space-y-1"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 目標白點設定 -->
+                <div class="bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-700">
+                    <h2 class="text-lg font-semibold mb-3 border-b border-slate-700 pb-2 text-white">2. 目標白點 (Target White)</h2>
+                    
+                    <div class="flex flex-wrap gap-3 mb-3">
+                        <label class="flex items-center cursor-pointer text-xs font-medium text-slate-300"><input type="checkbox" id="show-planckian" class="mr-1.5" onchange="updateChart()"> 黑體軌跡</label>
+                        <label class="flex items-center cursor-pointer text-xs font-medium text-slate-300"><input type="checkbox" id="show-macadam" class="mr-1.5" onchange="updateChart()" checked> MacAdam 橢圓 (3, 5-step)</label>
+                    </div>
+
+                    <select id="target-white-select" class="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm mb-2 focus:outline-none" onchange="handleTargetWhiteChange()">
+                        <optgroup label="標準光源 (Standard Daylight)">
+                            <option value="D65">D65 (6504K) - 標準日光</option>
+                            <option value="D50">D50 (5003K) - 印刷標準</option>
+                            <option value="D40">D40 (4000K)</option>
+                        </optgroup>
+                        <optgroup label="手動設定 (Manual)">
+                            <option value="custom">✏️ 自定義座標 (Custom CIE x,y)</option>
+                        </optgroup>
+                    </select>
+                    <div class="flex gap-2">
+                        <input type="number" id="tw-x" value="0.3127" step="0.0001" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-300 text-sm text-center" disabled onchange="updateChart()" placeholder="CIE x">
+                        <input type="number" id="tw-y" value="0.3290" step="0.0001" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-300 text-sm text-center" disabled onchange="updateChart()" placeholder="CIE y">
+                    </div>
+                </div>
+
+                <!-- 3. 實測評估與 PWM 混光 -->
+                <div class="bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-700">
+                    <h2 class="text-lg font-semibold mb-3 border-b border-slate-700 pb-2 text-white">3. 實測評估與混光分析</h2>
+                    
+                    <label class="block text-slate-400 text-xs mb-1">實測白點 (Measured White)</label>
+                    <div class="flex gap-2 mb-4">
+                        <input type="number" id="mw-x" value="0.3100" step="0.0001" class="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center focus:ring-1 focus:ring-indigo-500" onchange="updateChart()" placeholder="CIE x">
+                        <input type="number" id="mw-y" value="0.3320" step="0.0001" class="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center focus:ring-1 focus:ring-indigo-500" onchange="updateChart()" placeholder="CIE y">
+                    </div>
+
+                    <!-- 進階指標面板 -->
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <div class="bg-slate-900 rounded p-2 border border-slate-700 text-center">
+                            <div class="text-[10px] text-slate-400 mb-1">色度差 &Delta;u'v'</div>
+                            <div id="res-duv" class="text-sm font-mono font-bold text-indigo-400">0.0000</div>
+                        </div>
+                        <div class="bg-slate-900 rounded p-2 border border-slate-700 text-center">
+                            <div class="text-[10px] text-slate-400 mb-1">色純度 (Purity)</div>
+                            <div id="res-purity" class="text-sm font-mono font-bold text-emerald-400">0.0%</div>
+                        </div>
+                        <div class="bg-slate-900 rounded p-2 border border-slate-700 text-center col-span-2 flex justify-between items-center px-4">
+                            <div class="text-[11px] text-slate-400">主波長 (Dominant Wavelength)</div>
+                            <div id="res-dom-wl" class="text-base font-mono font-bold text-amber-400">N/A</div>
+                        </div>
+                    </div>
+
+                    <!-- PWM 亮度試算 -->
+                    <div class="bg-indigo-950/40 rounded-lg p-3 border border-indigo-900/50">
+                        <div class="text-xs font-bold text-indigo-300 mb-2 flex justify-between">
+                            <span>PWM 亮度混光比例 (Luminance Y)</span>
+                            <span class="text-[9px] font-normal text-indigo-400 opacity-75">*基於區間中位數推算</span>
+                        </div>
+                        <div id="pwm-result" class="flex h-6 rounded overflow-hidden">
+                            <!-- 透過 JS 動態產生 Bar -->
+                        </div>
+                        <div id="pwm-text" class="flex justify-between mt-1 text-[11px] font-mono font-bold">
+                            <!-- 透過 JS 動態產生文字 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側繪圖區 -->
+            <div class="w-full lg:w-2/3 bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-700 h-fit">
+                <div id="cie-plot" class="w-full aspect-square max-h-[850px] mx-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 核心數學與色彩科學運算 ---
+        
+        // CIE 1931 光譜軌跡資料 (380nm - 700nm, step 5nm)
+        const cieData = [
+            [0.1741, 0.0050], [0.1740, 0.0050], [0.1738, 0.0049], [0.1736, 0.0049], [0.1733, 0.0048], [0.1730, 0.0048], [0.1726, 0.0048], [0.1721, 0.0048], 
+            [0.1714, 0.0051], [0.1703, 0.0058], [0.1689, 0.0069], [0.1669, 0.0086], [0.1644, 0.0109], [0.1611, 0.0138], [0.1566, 0.0177], [0.1510, 0.0227], 
+            [0.1440, 0.0297], [0.1355, 0.0399], [0.1241, 0.0578], [0.1096, 0.0868], [0.0913, 0.1327], [0.0687, 0.2007], [0.0454, 0.2950], [0.0235, 0.4127], 
+            [0.0082, 0.5384], [0.0039, 0.6548], [0.0139, 0.7502], [0.0389, 0.8120], [0.0743, 0.8338], [0.1142, 0.8262], [0.1547, 0.8059], [0.1929, 0.7816], 
+            [0.2296, 0.7543], [0.2658, 0.7243], [0.3016, 0.6923], [0.3373, 0.6589], [0.3731, 0.6245], [0.4087, 0.5896], [0.4441, 0.5547], [0.4788, 0.5202], 
+            [0.5125, 0.4866], [0.5448, 0.4544], [0.5752, 0.4242], [0.6029, 0.3965], [0.6270, 0.3725], [0.6482, 0.3514], [0.6658, 0.3340], [0.6801, 0.3197], 
+            [0.6915, 0.3083], [0.7006, 0.2993], [0.7079, 0.2920], [0.7140, 0.2859], [0.7190, 0.2809], [0.7230, 0.2770], [0.7260, 0.2740], [0.7283, 0.2717], 
+            [0.7300, 0.2700], [0.7311, 0.2689], [0.7320, 0.2680], [0.7327, 0.2673], [0.7334, 0.2666], [0.7340, 0.2660], [0.7344, 0.2656], [0.7346, 0.2654], [0.7347, 0.2653]
+        ];
+
+        // 標準 MacAdam 中心參數 (以 CIE 1931 x,y 定義的橢圓)
+        const macadamStandards = [
+            { T: 2700, x: 0.4578, y: 0.4101, a: 0.00270, b: 0.00140, theta: 53.6 },
+            { T: 3000, x: 0.4338, y: 0.4030, a: 0.00278, b: 0.00136, theta: 53.2 },
+            { T: 4000, x: 0.3818, y: 0.3797, a: 0.00313, b: 0.00133, theta: 54.0 },
+            { T: 5000, x: 0.3447, y: 0.3553, a: 0.00274, b: 0.00118, theta: 59.6 },
+            { T: 6500, x: 0.3127, y: 0.3290, a: 0.00224, b: 0.00087, theta: 58.5 }
+        ];
+
+        // 加回所有標準色域
+        const standardGamuts = {
+            sRGB: { name: 'sRGB', color: '#a855f7', coords: [{x: 0.64, y: 0.33}, {x: 0.30, y: 0.60}, {x: 0.15, y: 0.06}] },
+            NTSC: { name: 'NTSC', color: '#ec4899', coords: [{x: 0.67, y: 0.33}, {x: 0.21, y: 0.71}, {x: 0.14, y: 0.08}] },
+            PAL: { name: 'PAL', color: '#eab308', coords: [{x: 0.64, y: 0.33}, {x: 0.29, y: 0.60}, {x: 0.15, y: 0.06}] },
+            AdobeRGB: { name: 'Adobe RGB', color: '#06b6d4', coords: [{x: 0.64, y: 0.33}, {x: 0.21, y: 0.71}, {x: 0.15, y: 0.06}] },
+            DCIP3: { name: 'DCI-P3', color: '#f97316', coords: [{x: 0.680, y: 0.320}, {x: 0.265, y: 0.690}, {x: 0.150, y: 0.060}] }
+        };
+
+        // 基本座標轉換
+        function wavelengthToCIExy(wave) {
+            if (wave <= 380) return { x: cieData[0][0], y: cieData[0][1] };
+            if (wave >= 700) return { x: cieData[64][0], y: cieData[64][1] };
+            let i = Math.floor((wave - 380) / 5);
+            let f = ((wave - 380) / 5) - i;
+            return { x: cieData[i][0] * (1 - f) + cieData[i+1][0] * f, y: cieData[i][1] * (1 - f) + cieData[i+1][1] * f };
+        }
+
+        function xyToUpVp(x, y) {
+            let den = -2 * x + 12 * y + 3;
+            if (den === 0) return { u: 0, v: 0 };
+            return { u: (4 * x) / den, v: (9 * y) / den };
+        }
+
+        function toCurrentSpace(x, y) {
+            if (document.getElementById('space-1976').checked) {
+                let upvp = xyToUpVp(x, y);
+                return { x: upvp.u, y: upvp.v };
+            }
+            return { x, y };
+        }
+
+        // --- MacAdam 橢圓生成 ---
+        function getMacAdamEllipse(cx, cy, steps) {
+            // 尋找最近的標準色溫中心以套用形狀參數，但中心點維持用戶目標點
+            let closest = macadamStandards[0];
+            let minDist = Infinity;
+            for(let m of macadamStandards) {
+                let d = Math.pow(m.x - cx, 2) + Math.pow(m.y - cy, 2);
+                if(d < minDist) { minDist = d; closest = m; }
+            }
+            let a = closest.a * steps;
+            let b = closest.b * steps;
+            let rad = closest.theta * Math.PI / 180;
+            
+            let ptsX = [], ptsY = [];
+            for(let i=0; i<=360; i+=5) {
+                let t = i * Math.PI / 180;
+                let x = a * Math.cos(t), y = b * Math.sin(t);
+                let xRot = x * Math.cos(rad) - y * Math.sin(rad);
+                let yRot = x * Math.sin(rad) + y * Math.cos(rad);
+                ptsX.push(cx + xRot); ptsY.push(cy + yRot);
+            }
+            return {x: ptsX, y: ptsY};
+        }
+
+        // --- 主波長與純度運算 ---
+        function getLineIntersection(pOrigin, pDir, p1, p2) {
+            let v1 = { x: pOrigin.x - p1.x, y: pOrigin.y - p1.y };
+            let v2 = { x: p2.x - p1.x, y: p2.y - p1.y };
+            let v3 = { x: -pDir.y, y: pDir.x };
+            let dot = v2.x * v3.x + v2.y * v3.y;
+            if (Math.abs(dot) < 1e-9) return null;
+            let t1 = (v2.x * v1.y - v2.y * v1.x) / dot;
+            let t2 = (v1.x * v3.x + v1.y * v3.y) / dot;
+            if (t1 >= 0 && t2 >= 0 && t2 <= 1) {
+                return { t: t1, pt: { x: pOrigin.x + t1 * pDir.x, y: pOrigin.y + t1 * pDir.y }, fraction: t2 };
+            }
+            return null;
+        }
+
+        function calculateDominantWavelength(xw, yw, xm, ym) {
+            let dx = xm - xw, dy = ym - yw;
+            if (dx === 0 && dy === 0) return { wl: "White", purity: 0, isComplementary: false, intersect: {x:xw, y:yw} };
+            
+            let minT = Infinity, bestIntersect = null, isPurple = false, domWl = null;
+
+            // 射線測試所有光譜邊界
+            for(let i=0; i<65; i++) {
+                let p1 = {x: cieData[i][0], y: cieData[i][1]};
+                let p2 = (i === 64) ? {x: cieData[0][0], y: cieData[0][1]} : {x: cieData[i+1][0], y: cieData[i+1][1]};
+                let inter = getLineIntersection({x:xw, y:yw}, {x:dx, y:dy}, p1, p2);
+                if (inter && inter.t > 0 && inter.t < minT) {
+                    minT = inter.t; bestIntersect = inter; isPurple = (i === 64);
+                    if (!isPurple) domWl = 380 + (i * 5) + (inter.fraction * 5);
+                }
+            }
+
+            if (!bestIntersect) return { wl: "N/A", purity: 0 };
+            let purity = (1.0 / minT) * 100; // t=1 是實測點，t=minT是邊界，純度為 1/minT
+
+            // 若打到紫紅線，則反向求互補波長
+            if (isPurple) {
+                let backMinT = Infinity, backWl = null;
+                for(let i=0; i<64; i++) {
+                    let p1 = {x: cieData[i][0], y: cieData[i][1]}, p2 = {x: cieData[i+1][0], y: cieData[i+1][1]};
+                    let inter = getLineIntersection({x:xw, y:yw}, {x:-dx, y:-dy}, p1, p2);
+                    if (inter && inter.t > 0 && inter.t < backMinT) {
+                        backMinT = inter.t; backWl = 380 + (i * 5) + (inter.fraction * 5);
+                    }
+                }
+                return { wl: backWl ? backWl.toFixed(1) + "c" : "N/A", purity: purity, intersect: bestIntersect.pt };
+            }
+            return { wl: domWl.toFixed(1) + " nm", purity: purity, intersect: bestIntersect.pt };
+        }
+
+        // --- PWM 亮度試算 (矩陣求解) ---
+        function solvePWM(xr, yr, xg, yg, xb, yb, xw, yw) {
+            if (yr===0 || yg===0 || yb===0 || yw===0) return null;
+            let Xw = xw/yw, Zw = (1-xw-yw)/yw;
+            let Xr = xr/yr, Zr = (1-xr-yr)/yr;
+            let Xg = xg/yg, Zg = (1-xg-yg)/yg;
+            let Xb = xb/yb, Zb = (1-xb-yb)/yb;
+            
+            // Cramer's rule for [Xr, Xg, Xb; 1, 1, 1; Zr, Zg, Zb] * [Yr; Yg; Yb] = [Xw; 1; Zw]
+            let detA = Xr*(Zb - Zg) - Xg*(Zb - Zr) + Xb*(Zg - Zr);
+            if (Math.abs(detA) < 1e-9) return null; 
+            
+            let Yr = (Xw*(Zb - Zg) - Xg*(Zb - Zw) + Xb*(Zg - Zw)) / detA;
+            let Yg = (Xr*(Zb - Zw) - Xw*(Zb - Zr) + Xb*(Zw - Zr)) / detA;
+            let Yb = (Xr*(Zw - Zg) - Xg*(Zw - Zr) + Xw*(Zg - Zr)) / detA;
+            
+            return {Yr, Yg, Yb};
+        }
+
+        // --- UI 工具 ---
+        function getDaylightWhitePoint(Tc) {
+            let effTc = Math.max(4000, Math.min(Tc, 25000));
+            let t = 1000 / effTc;
+            let x_D = effTc <= 7000 ? -4.6070*(t**3) + 2.9678*(t**2) + 0.09911*t + 0.244063 : -2.0064*(t**3) + 1.9018*(t**2) + 0.24748*t + 0.237040;
+            let y_D = -3.000*(x_D**2) + 2.870*x_D - 0.275;
+            return {x: x_D, y: y_D};
+        }
+
+        function getPlanckianXY(T) {
+            let effT = Math.max(1667, Math.min(T, 25000));
+            let t = 1000 / effT;
+            let x = effT <= 4000 ? -0.2661239*(t**3) - 0.2343589*(t**2) + 0.8776956*t + 0.179910 : -3.0258469*(t**3) + 2.1070379*(t**2) + 0.2226347*t + 0.240390;
+            let y = -1.1063814*(x**3) - 1.34811020*(x**2) + 2.18555832*x - 0.20219683;
+            return {x, y};
+        }
+
+        function handleTargetWhiteChange() {
+            let select = document.getElementById('target-white-select').value;
+            let tx = document.getElementById('tw-x'), ty = document.getElementById('tw-y');
+            if (select === 'custom') {
+                tx.disabled = false; ty.disabled = false;
+                tx.classList.replace('bg-slate-900', 'bg-slate-700'); tx.classList.replace('border-slate-600', 'border-indigo-500'); tx.classList.add('ring-1', 'ring-indigo-500');
+                ty.classList.replace('bg-slate-900', 'bg-slate-700'); ty.classList.replace('border-slate-600', 'border-indigo-500'); ty.classList.add('ring-1', 'ring-indigo-500');
+            } else {
+                tx.disabled = true; ty.disabled = true;
+                tx.classList.replace('bg-slate-700', 'bg-slate-900'); tx.classList.replace('border-indigo-500', 'border-slate-600'); tx.classList.remove('ring-1', 'ring-indigo-500');
+                ty.classList.replace('bg-slate-700', 'bg-slate-900'); ty.classList.replace('border-indigo-500', 'border-slate-600'); ty.classList.remove('ring-1', 'ring-indigo-500');
+                let wp = getDaylightWhitePoint(parseInt(select.replace('D', '')) * 100);
+                tx.value = wp.x.toFixed(4); ty.value = wp.y.toFixed(4);
+            }
+            updateChart();
+        }
+
+        function sanitizeInput(id, def, min, max) {
+            let el = document.getElementById(id), val = parseFloat(el.value);
+            if (isNaN(val)) val = def;
+            val = Math.max(min, Math.min(val, max));
+            el.value = val; return val;
+        }
+
+        function toggleCustomPanel() {
+            const panel = document.getElementById('custom-gamut-panel');
+            panel.classList.toggle('hidden', !document.getElementById('gamut-Custom').checked);
+        }
+
+        function presetRec2020() {
+            document.getElementById('c-rx').value = 0.708; document.getElementById('c-ry').value = 0.292;
+            document.getElementById('c-gx').value = 0.170; document.getElementById('c-gy').value = 0.797;
+            document.getElementById('c-bx').value = 0.131; document.getElementById('c-by').value = 0.046;
+            updateChart();
+        }
+
+        // Polygon Area and Clipping (Sutherland-Hodgman)
+        function getPolygonArea(vertices) {
+            let area = 0, n = vertices.length;
+            if (n < 3) return 0;
+            for (let i = 0; i < n; i++) { area += vertices[i].x * vertices[(i + 1) % n].y - vertices[(i + 1) % n].x * vertices[i].y; }
+            return Math.abs(area / 2.0);
+        }
+        function intersectPolygons(subj, clip) {
+            let out = subj, cp1 = clip[clip.length - 1];
+            for (let j = 0; j < clip.length; j++) {
+                let cp2 = clip[j], inp = out; out = [];
+                if(inp.length === 0) break;
+                let s = inp[inp.length - 1];
+                for (let i = 0; i < inp.length; i++) {
+                    let e = inp[i];
+                    if ((cp2.x - cp1.x) * (e.y - cp1.y) - (cp2.y - cp1.y) * (e.x - cp1.x) >= 1e-9) {
+                        if (!((cp2.x - cp1.x) * (s.y - cp1.y) - (cp2.y - cp1.y) * (s.x - cp1.x) >= 1e-9)) out.push(compInt(s, e, cp1, cp2));
+                        out.push(e);
+                    } else if ((cp2.x - cp1.x) * (s.y - cp1.y) - (cp2.y - cp1.y) * (s.x - cp1.x) >= 1e-9) out.push(compInt(s, e, cp1, cp2));
+                    s = e;
+                }
+                cp1 = cp2;
+            }
+            return out;
+        }
+        function compInt(s, e, cp1, cp2) {
+            let dcx = cp1.x - cp2.x, dcy = cp1.y - cp2.y, dpx = s.x - e.x, dpy = s.y - e.y, den = dcx * dpy - dcy * dpx;
+            if (Math.abs(den) < 1e-10) return s;
+            let n1 = cp1.x * cp2.y - cp1.y * cp2.x, n2 = s.x * e.y - s.y * e.x;
+            return { x: (n1 * dpx - n2 * dcx) / den, y: (n1 * dpy - n2 * dcy) / den };
+        }
+
+        // --- 主繪圖與資料更新 ---
+        function updateChart() {
+            const is1976 = document.getElementById('space-1976').checked;
+            
+            // 讀取設定
+            let rMin = sanitizeInput('r-min', 620, 600, 700), rMax = sanitizeInput('r-max', 625, 600, 700);
+            let gMin = sanitizeInput('g-min', 515, 500, 560), gMax = sanitizeInput('g-max', 535, 500, 560);
+            let bMin = sanitizeInput('b-min', 460, 400, 490), bMax = sanitizeInput('b-max', 475, 400, 490);
+            if(rMin>rMax)[rMin,rMax]=[rMax,rMin]; if(gMin>gMax)[gMin,gMax]=[gMax,gMin]; if(bMin>bMax)[bMin,bMax]=[bMax,bMin];
+
+            let tx = sanitizeInput('tw-x', 0.3127, 0, 1), ty = sanitizeInput('tw-y', 0.3290, 0, 1);
+            let mx = sanitizeInput('mw-x', 0.3100, 0, 1), my = sanitizeInput('mw-y', 0.3320, 0, 1);
+
+            let traces = [];
+
+            // 1. 光譜軌跡
+            const locusX = [], locusY = [], locusText = [];
+            for (let w = 380; w <= 780; w += 1) {
+                let c = toCurrentSpace(wavelengthToCIExy(w).x, wavelengthToCIExy(w).y);
+                locusX.push(c.x); locusY.push(c.y); locusText.push(`${w} nm`);
+            }
+            locusX.push(locusX[0]); locusY.push(locusY[0]); locusText.push('Line of Purples');
+            traces.push({ x: locusX, y: locusY, text: locusText, mode: 'lines', line: { color: '#64748b', width: 2 }, name: '光譜軌跡', hoverinfo: 'text+x+y' });
+
+            // 2. LED 容差範圍與邊界
+            const getRCc = (min, max) => { let rx=[], ry=[]; for(let w=min; w<=max; w++) { let c = toCurrentSpace(wavelengthToCIExy(w).x, wavelengthToCIExy(w).y); rx.push(c.x); ry.push(c.y); } return {x: rx, y: ry}; };
+            let rCoords = getRCc(rMin, rMax), gCoords = getRCc(gMin, gMax), bCoords = getRCc(bMin, bMax);
+            traces.push({ x: rCoords.x, y: rCoords.y, mode: 'lines+markers', line: { color: '#ef4444', width: 5 }, marker: { size: 6 }, name: '紅光變動範圍' });
+            traces.push({ x: gCoords.x, y: gCoords.y, mode: 'lines+markers', line: { color: '#22c55e', width: 5 }, marker: { size: 6 }, name: '綠光變動範圍' });
+            traces.push({ x: bCoords.x, y: bCoords.y, mode: 'lines+markers', line: { color: '#3b82f6', width: 5 }, marker: { size: 6 }, name: '藍光變動範圍' });
+            
+            let ptRMin = toCurrentSpace(wavelengthToCIExy(rMin).x, wavelengthToCIExy(rMin).y), ptRMax = toCurrentSpace(wavelengthToCIExy(rMax).x, wavelengthToCIExy(rMax).y);
+            let ptGMin = toCurrentSpace(wavelengthToCIExy(gMin).x, wavelengthToCIExy(gMin).y), ptGMax = toCurrentSpace(wavelengthToCIExy(gMax).x, wavelengthToCIExy(gMax).y);
+            let ptBMin = toCurrentSpace(wavelengthToCIExy(bMin).x, wavelengthToCIExy(bMin).y), ptBMax = toCurrentSpace(wavelengthToCIExy(bMax).x, wavelengthToCIExy(bMax).y);
+            traces.push({
+                x: [ptBMin.x, ptBMax.x, ptGMin.x, ptGMax.x, ptRMin.x, ptRMax.x, ptBMin.x], y: [ptBMin.y, ptBMax.y, ptGMin.y, ptGMax.y, ptRMin.y, ptRMax.y, ptBMin.y], 
+                mode: 'lines', fill: 'toself', fillcolor: 'rgba(99, 102, 241, 0.1)', line: { color: '#818cf8', width: 1, dash: 'dot' }, name: 'LED 容差空間', hoverinfo: 'none'
+            });
+
+            // 3. 黑體與 MacAdam
+            if (document.getElementById('show-planckian').checked) {
+                let plX = [], plY = [];
+                for (let T = 1667; T <= 25000; T += 200) { let pt = getPlanckianXY(T); let c = toCurrentSpace(pt.x, pt.y); plX.push(c.x); plY.push(c.y); }
+                traces.push({ x: plX, y: plY, mode: 'lines', line: { color: '#f59e0b', width: 2 }, name: '黑體軌跡' });
+            }
+            if (document.getElementById('show-macadam').checked) {
+                let m3 = getMacAdamEllipse(tx, ty, 3);
+                let m3Space = {x: m3.x.map((_, i) => toCurrentSpace(m3.x[i], m3.y[i]).x), y: m3.y.map((_, i) => toCurrentSpace(m3.x[i], m3.y[i]).y)};
+                let m5 = getMacAdamEllipse(tx, ty, 5);
+                let m5Space = {x: m5.x.map((_, i) => toCurrentSpace(m5.x[i], m5.y[i]).x), y: m5.y.map((_, i) => toCurrentSpace(m5.x[i], m5.y[i]).y)};
+                
+                traces.push({ x: m5Space.x, y: m5Space.y, mode: 'lines', fill: 'toself', fillcolor: 'rgba(255, 255, 255, 0.05)', line: { color: '#94a3b8', width: 1 }, name: '5-step MacAdam', hoverinfo: 'none' });
+                traces.push({ x: m3Space.x, y: m3Space.y, mode: 'lines', fill: 'toself', fillcolor: 'rgba(255, 255, 255, 0.15)', line: { color: '#cbd5e1', width: 1.5 }, name: '3-step MacAdam', hoverinfo: 'none' });
+            }
+
+            // 4. 白點、主波長、Delta u'v' 分析
+            let domData = calculateDominantWavelength(tx, ty, mx, my);
+            document.getElementById('res-dom-wl').innerText = domData.wl;
+            document.getElementById('res-purity').innerText = domData.purity.toFixed(1) + "%";
+            
+            let tupvp = xyToUpVp(tx, ty), mupvp = xyToUpVp(mx, my);
+            document.getElementById('res-duv').innerText = Math.sqrt(Math.pow(tupvp.u - mupvp.u, 2) + Math.pow(tupvp.v - mupvp.v, 2)).toFixed(4);
+
+            let tPt = toCurrentSpace(tx, ty), mPt = toCurrentSpace(mx, my), edgePt = toCurrentSpace(domData.intersect.x, domData.intersect.y);
+            traces.push({ x: [tPt.x, edgePt.x], y: [tPt.y, edgePt.y], mode: 'lines', line: { color: '#fbbf24', width: 1, dash: 'dot' }, name: '主波長射線', hoverinfo: 'none' });
+            traces.push({ x: [tPt.x], y: [tPt.y], mode: 'markers', marker: { symbol: 'star', size: 12, color: 'white', line: {color: '#334155', width: 1} }, name: '目標白點' });
+            traces.push({ x: [mPt.x], y: [mPt.y], mode: 'markers', marker: { symbol: 'circle', size: 8, color: '#fbbf24', line: {color: 'white', width: 1} }, name: '實測白點' });
+
+            // 5. PWM 亮度試算
+            let midR = wavelengthToCIExy((rMin + rMax) / 2.0);
+            let midG = wavelengthToCIExy((gMin + gMax) / 2.0);
+            let midB = wavelengthToCIExy((bMin + bMax) / 2.0);
+            
+            let pwm = solvePWM(midR.x, midR.y, midG.x, midG.y, midB.x, midB.y, tx, ty);
+            let pwmBar = document.getElementById('pwm-result');
+            let pwmTxt = document.getElementById('pwm-text');
+            if (!pwm || pwm.Yr < 0 || pwm.Yg < 0 || pwm.Yb < 0) {
+                pwmBar.innerHTML = `<div class="w-full bg-red-900/50 flex items-center justify-center text-xs text-red-200">目標超出 LED 色域 (無法混光)</div>`;
+                pwmTxt.innerHTML = '';
+            } else {
+                let total = pwm.Yr + pwm.Yg + pwm.Yb;
+                let pr = (pwm.Yr / total * 100), pg = (pwm.Yg / total * 100), pb = (pwm.Yb / total * 100);
+                pwmBar.innerHTML = `
+                    <div style="width: ${pr}%" class="bg-red-500 h-full transition-all"></div>
+                    <div style="width: ${pg}%" class="bg-green-500 h-full transition-all"></div>
+                    <div style="width: ${pb}%" class="bg-blue-500 h-full transition-all"></div>`;
+                pwmTxt.innerHTML = `<span class="text-red-400">R: ${pr.toFixed(1)}%</span><span class="text-green-400">G: ${pg.toFixed(1)}%</span><span class="text-blue-400">B: ${pb.toFixed(1)}%</span>`;
+            }
+
+            // 6. 色域涵蓋率運算
+            let ledTri = [toCurrentSpace(midR.x, midR.y), toCurrentSpace(midG.x, midG.y), toCurrentSpace(midB.x, midB.y)]; 
+            let ledArea = getPolygonArea(ledTri);
+            let resultsHTML = '', isAnyStandardChecked = false;
+            
+            let currentGamuts = Object.assign({}, standardGamuts);
+            if (document.getElementById('gamut-Custom') && document.getElementById('gamut-Custom').checked) {
+                currentGamuts['Custom'] = { name: '自定義', color: '#10b981', coords: [
+                    {x: sanitizeInput('c-rx', 0.708, 0, 1), y: sanitizeInput('c-ry', 0.292, 0, 1)},
+                    {x: sanitizeInput('c-gx', 0.170, 0, 1), y: sanitizeInput('c-gy', 0.797, 0, 1)},
+                    {x: sanitizeInput('c-bx', 0.131, 0, 1), y: sanitizeInput('c-by', 0.046, 0, 1)}
+                ]};
+            }
+
+            Object.keys(currentGamuts).forEach(key => {
+                if (document.getElementById('gamut-' + key).checked) {
+                    isAnyStandardChecked = true;
+                    let std = currentGamuts[key];
+                    let stdSpaceCoords = std.coords.map(pt => toCurrentSpace(pt.x, pt.y));
+                    
+                    traces.push({ x: [...stdSpaceCoords.map(p=>p.x), stdSpaceCoords[0].x], y: [...stdSpaceCoords.map(p=>p.y), stdSpaceCoords[0].y], mode: 'lines', line: { color: std.color, width: 2, dash: 'dash' }, name: std.name, hoverinfo: 'none' });
+
+                    let stdArea = getPolygonArea(stdSpaceCoords);
+                    let intersectPoly = intersectPolygons(ledTri, stdSpaceCoords);
+                    let intersectArea = getPolygonArea(intersectPoly);
+                    let cvg = stdArea === 0 ? 0 : (intersectArea / stdArea) * 100;
+                    let vol = stdArea === 0 ? 0 : (ledArea / stdArea) * 100;
+
+                    resultsHTML += `<div class="grid grid-cols-4 gap-2 text-xs py-1 border-b border-slate-700/50"><div class="col-span-2 font-bold" style="color:${std.color}">${std.name}</div><div class="text-right text-white">${cvg.toFixed(1)}%</div><div class="text-right text-slate-400">${vol.toFixed(1)}%</div></div>`;
+                }
+            });
+            document.getElementById('coverage-container').classList.toggle('hidden', !isAnyStandardChecked);
+            document.getElementById('coverage-results').innerHTML = resultsHTML;
+
+            // Plotly 繪圖
+            const axisTitleX = is1976 ? "u'" : "x", axisTitleY = is1976 ? "v'" : "y", rangeMax = is1976 ? 0.75 : 0.85;
+            const layout = {
+                title: { text: is1976 ? 'CIE 1976 (u\', v\') 色度空間' : 'CIE 1931 (x, y) 色度空間', font: { size: 16, color: '#f8fafc' }, y: 0.98 },
+                xaxis: { title: axisTitleX, range: [-0.05, rangeMax], zeroline: false, gridcolor: '#334155' },
+                yaxis: { title: axisTitleY, range: [-0.05, rangeMax], scaleanchor: 'x', scaleratio: 1, zeroline: false, gridcolor: '#334155' },
+                plot_bgcolor: '#1e293b', paper_bgcolor: '#1e293b', font: { color: '#f8fafc' }, margin: { l: 40, r: 10, t: 40, b: 40 },
+                showlegend: true, legend: { x: 0.95, y: 0.95, xanchor: 'right', yanchor: 'top', bgcolor: 'rgba(30,41,59,0.85)', bordercolor: '#475569', borderwidth: 1 }, hovermode: 'closest'
+            };
+            Plotly.newPlot('cie-plot', traces, layout, { responsive: true, displayModeBar: false });
+        }
+
+        window.onload = updateChart;
+    </script>
+</body>
+</html>

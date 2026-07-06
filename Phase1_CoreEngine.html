@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 1: Gamut Target & CSC Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        input[type="number"] {
+            background-color: #1e293b; border: 1px solid #475569; color: #fff;
+            padding: 4px 8px; border-radius: 4px; width: 90px; font-family: monospace; font-size: 13px; text-align: right;
+        }
+        input[type="number"]:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+        .color-label { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .matrix-input-style {
+            background-color: #0f172a; border: 1px solid #334155; color: #94a3b8;
+            padding: 6px 12px; border-radius: 4px; width: 100%; font-family: monospace; font-size: 14px; text-align: center;
+        }
+    </style>
+</head>
+<body class="p-6 min-h-screen flex flex-col items-center">
+
+    <div class="w-full max-w-4xl bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700">
+        
+        <div class="bg-slate-900 px-6 py-4 border-b border-slate-700">
+            <h2 class="text-2xl font-bold text-slate-100">Phase 1: Core CSC Engine</h2>
+            <p class="text-sm text-slate-400 mt-1">單一螢幕目標色域對齊與 $3 \times 3$ 調整係數計算</p>
+        </div>
+
+        <div class="p-6 space-y-6">
+            
+            <div class="bg-slate-900/50 p-5 rounded-lg border border-slate-600">
+                <h3 class="text-lg font-bold text-slate-200 mb-4 border-b border-slate-700 pb-2">1. Original value (原始實測極限)</h3>
+                <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center mb-2 text-sm text-slate-400 font-bold">
+                    <div>Channel</div><div class="text-center">Brightness (Y)</div><div class="text-center">Cx</div><div class="text-center">Cy</div>
+                </div>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center">
+                        <div class="flex items-center text-sm font-bold text-red-400"><span class="color-label bg-red-500"></span>Red</div>
+                        <div><input type="number" id="orig_r_y" value="900" step="1"></div>
+                        <div><input type="number" id="orig_r_cx" value="0.680" step="0.001"></div>
+                        <div><input type="number" id="orig_r_cy" value="0.310" step="0.001"></div>
+                    </div>
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center">
+                        <div class="flex items-center text-sm font-bold text-green-400"><span class="color-label bg-green-500"></span>Green</div>
+                        <div><input type="number" id="orig_g_y" value="1800" step="1"></div>
+                        <div><input type="number" id="orig_g_cx" value="0.190" step="0.001"></div>
+                        <div><input type="number" id="orig_g_cy" value="0.740" step="0.001"></div>
+                    </div>
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center">
+                        <div class="flex items-center text-sm font-bold text-blue-400"><span class="color-label bg-blue-500"></span>Blue</div>
+                        <div><input type="number" id="orig_b_y" value="300" step="1"></div>
+                        <div><input type="number" id="orig_b_cx" value="0.150" step="0.001"></div>
+                        <div><input type="number" id="orig_b_cy" value="0.050" step="0.001"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 p-5 rounded-lg border border-cyan-900/50 shadow-[0_0_15px_rgba(6,182,212,0.05)]">
+                <h3 class="text-lg font-bold text-cyan-400 mb-4 border-b border-cyan-900/50 pb-2">2. Target value (目標色彩空間與白點)</h3>
+                <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center mb-2 text-sm text-slate-400 font-bold">
+                    <div>Channel</div><div class="text-center">Brightness (Y)</div><div class="text-center">Cx</div><div class="text-center">Cy</div>
+                </div>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center">
+                        <div class="flex items-center text-sm font-bold text-red-300"><span class="color-label bg-red-400"></span>Target R</div>
+                        <div class="text-center text-cyan-200 font-mono text-sm bg-slate-800 py-1 rounded border border-slate-700" id="calc_tgt_r_y">-</div>
+                        <div><input type="number" id="tgt_r_cx" value="0.640" step="0.001"></div>
+                        <div><input type="number" id="tgt_r_cy" value="0.330" step="0.001"></div>
+                    </div>
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center">
+                        <div class="flex items-center text-sm font-bold text-green-300"><span class="color-label bg-green-400"></span>Target G</div>
+                        <div class="text-center text-cyan-200 font-mono text-sm bg-slate-800 py-1 rounded border border-slate-700" id="calc_tgt_g_y">-</div>
+                        <div><input type="number" id="tgt_g_cx" value="0.300" step="0.001"></div>
+                        <div><input type="number" id="tgt_g_cy" value="0.600" step="0.001"></div>
+                    </div>
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center mb-4">
+                        <div class="flex items-center text-sm font-bold text-blue-300"><span class="color-label bg-blue-400"></span>Target B</div>
+                        <div class="text-center text-cyan-200 font-mono text-sm bg-slate-800 py-1 rounded border border-slate-700" id="calc_tgt_b_y">-</div>
+                        <div><input type="number" id="tgt_b_cx" value="0.150" step="0.001"></div>
+                        <div><input type="number" id="tgt_b_cy" value="0.060" step="0.001"></div>
+                    </div>
+                    <div class="grid grid-cols-[100px_100px_100px_100px] gap-4 items-center pt-3 border-t border-slate-700">
+                        <div class="flex items-center text-sm font-bold text-white"><span class="color-label bg-white border border-slate-400"></span>Target W</div>
+                        <div><input type="number" id="tgt_w_y" value="500" step="1" class="border-cyan-500"></div>
+                        <div><input type="number" id="tgt_w_cx" value="0.3127" step="0.001" class="border-cyan-500"></div>
+                        <div><input type="number" id="tgt_w_cy" value="0.3290" step="0.001" class="border-cyan-500"></div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">* 系統會透過指定的 Target W 反算出上方 RGB 各自需要的 Brightness (Y)。</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/80 p-5 rounded-lg border border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
+                <h3 class="text-lg font-bold text-indigo-400 mb-4 border-b border-indigo-500/50 pb-2">3. Adjustment factor (色彩空間轉換矩陣)</h3>
+                
+                <div class="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr] gap-x-4 gap-y-3 items-center max-w-2xl mx-auto">
+                    
+                    <div class="text-slate-300 font-bold text-right">Rr</div>
+                    <div id="out_rr" class="matrix-input-style">1.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Rg</div>
+                    <div id="out_rg" class="matrix-input-style">0.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Rb</div>
+                    <div id="out_rb" class="matrix-input-style">0.0000</div>
+
+                    <div class="text-slate-300 font-bold text-right">Gr</div>
+                    <div id="out_gr" class="matrix-input-style">0.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Gg</div>
+                    <div id="out_gg" class="matrix-input-style">1.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Gb</div>
+                    <div id="out_gb" class="matrix-input-style">0.0000</div>
+
+                    <div class="text-slate-300 font-bold text-right">Br</div>
+                    <div id="out_br" class="matrix-input-style">0.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Bg</div>
+                    <div id="out_bg" class="matrix-input-style">0.0000</div>
+                    <div class="text-slate-300 font-bold text-right">Bb</div>
+                    <div id="out_bb" class="matrix-input-style">1.0000</div>
+
+                </div>
+                <p id="error-msg" class="text-red-500 text-center mt-4 hidden font-bold text-sm">數值錯誤：無法計算反矩陣，請檢查 Cx/Cy 座標是否有誤。</p>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    // 綁定所有輸入框的事件
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('input', calculateCSC);
+        input.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            const step = parseFloat(this.getAttribute('step')) || 1;
+            const direction = e.deltaY < 0 ? 1 : -1;
+            this.value = (parseFloat(this.value) + direction * step).toFixed(step < 1 ? 3 : 0);
+            calculateCSC();
+        });
+    });
+
+    function getVal(id) {
+        const val = parseFloat(document.getElementById(id).value);
+        return isNaN(val) ? 0 : val;
+    }
+
+    // 基礎色彩數學函式
+    function xyY_to_XYZ(x, y, Y) {
+        if (Math.abs(y) < 0.0001) throw new Error("Cy cannot be 0");
+        return [(x * Y) / y, Y, ((1 - x - y) * Y) / y];
+    }
+
+    function invert3x3(m) {
+        let det = m[0][0]*(m[1][1]*m[2][2] - m[2][1]*m[1][2]) 
+                - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0]) 
+                + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+        if (Math.abs(det) < 1e-9) throw new Error("Singular Matrix");
+        return [
+            [(m[1][1]*m[2][2] - m[2][1]*m[1][2])/det, (m[0][2]*m[2][1] - m[0][1]*m[2][2])/det, (m[0][1]*m[1][2] - m[0][2]*m[1][1])/det],
+            [(m[1][2]*m[2][0] - m[1][0]*m[2][2])/det, (m[0][0]*m[2][2] - m[0][2]*m[2][0])/det, (m[1][0]*m[0][2] - m[0][0]*m[1][2])/det],
+            [(m[1][0]*m[2][1] - m[1][1]*m[2][0])/det, (m[2][0]*m[0][1] - m[0][0]*m[2][1])/det, (m[0][0]*m[1][1] - m[1][0]*m[0][1])/det]
+        ];
+    }
+
+    function multiply3x3(a, b) {
+        let res = [[0,0,0], [0,0,0], [0,0,0]];
+        for (let i = 0; i < 3; i++)
+            for (let j = 0; j < 3; j++)
+                res[i][j] = a[i][0]*b[0][j] + a[i][1]*b[1][j] + a[i][2]*b[2][j];
+        return res;
+    }
+
+    function multiplyMatrixVector(m, v) {
+        return [
+            m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2],
+            m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2],
+            m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2]
+        ];
+    }
+
+    function buildXYZMatrix(r_x, r_y, r_Y, g_x, g_y, g_Y, b_x, b_y, b_Y) {
+        const XYZ_R = xyY_to_XYZ(r_x, r_y, r_Y);
+        const XYZ_G = xyY_to_XYZ(g_x, g_y, g_Y);
+        const XYZ_B = xyY_to_XYZ(b_x, b_y, b_Y);
+        return [
+            [XYZ_R[0], XYZ_G[0], XYZ_B[0]],
+            [XYZ_R[1], XYZ_G[1], XYZ_B[1]],
+            [XYZ_R[2], XYZ_G[2], XYZ_B[2]]
+        ];
+    }
+
+    // 主運算引擎
+    function calculateCSC() {
+        const errBox = document.getElementById('error-msg');
+        errBox.classList.add('hidden');
+
+        try {
+            // 取得 Target White 數值
+            const tgt_w_cx = getVal('tgt_w_cx');
+            const tgt_w_cy = getVal('tgt_w_cy');
+            const tgt_w_y = getVal('tgt_w_y');
+
+            // 取得 Target RGB 座標
+            const tgt_r_cx = getVal('tgt_r_cx'), tgt_r_cy = getVal('tgt_r_cy');
+            const tgt_g_cx = getVal('tgt_g_cx'), tgt_g_cy = getVal('tgt_g_cy');
+            const tgt_b_cx = getVal('tgt_b_cx'), tgt_b_cy = getVal('tgt_b_cy');
+
+            // 1. 白點平衡運算 (計算出 Target RGB 各自需要的 Y)
+            const XYZ_W = xyY_to_XYZ(tgt_w_cx, tgt_w_cy, tgt_w_y);
+            const P_matrix = [
+                [tgt_r_cx/tgt_r_cy, tgt_g_cx/tgt_g_cy, tgt_b_cx/tgt_b_cy],
+                [1, 1, 1], 
+                [(1 - tgt_r_cx - tgt_r_cy)/tgt_r_cy, (1 - tgt_g_cx - tgt_g_cy)/tgt_g_cy, (1 - tgt_b_cx - tgt_b_cy)/tgt_b_cy]
+            ];
+            
+            const P_inv = invert3x3(P_matrix);
+            const req_Y = multiplyMatrixVector(P_inv, XYZ_W);
+            
+            // 將算出的亮度顯示在網頁上 (對應到您截圖中的 DCI-P3 絕對亮度概念)
+            document.getElementById('calc_tgt_r_y').innerText = req_Y[0].toFixed(3);
+            document.getElementById('calc_tgt_g_y').innerText = req_Y[1].toFixed(3);
+            document.getElementById('calc_tgt_b_y').innerText = req_Y[2].toFixed(3);
+
+            // 2. 建立 Original Matrix 與 Target Matrix
+            const M_orig = buildXYZMatrix(
+                getVal('orig_r_cx'), getVal('orig_r_cy'), getVal('orig_r_y'),
+                getVal('orig_g_cx'), getVal('orig_g_cy'), getVal('orig_g_y'),
+                getVal('orig_b_cx'), getVal('orig_b_cy'), getVal('orig_b_y')
+            );
+            
+            const M_tgt = buildXYZMatrix(
+                tgt_r_cx, tgt_r_cy, req_Y[0],
+                tgt_g_cx, tgt_g_cy, req_Y[1],
+                tgt_b_cx, tgt_b_cy, req_Y[2]
+            );
+
+            // 3. 計算 CSC 矩陣 (Adjustment Factor) : CSC = M_orig_inv * M_tgt
+            const CSC = multiply3x3(invert3x3(M_orig), M_tgt);
+
+            // 4. 將結果填入 3x3 九宮格 (排版對齊您的軟體截圖)
+            document.getElementById('out_rr').innerText = CSC[0][0].toFixed(4);
+            document.getElementById('out_rg').innerText = CSC[0][1].toFixed(4);
+            document.getElementById('out_rb').innerText = CSC[0][2].toFixed(4);
+            
+            document.getElementById('out_gr').innerText = CSC[1][0].toFixed(4);
+            document.getElementById('out_gg').innerText = CSC[1][1].toFixed(4);
+            document.getElementById('out_gb').innerText = CSC[1][2].toFixed(4);
+            
+            document.getElementById('out_br').innerText = CSC[2][0].toFixed(4);
+            document.getElementById('out_bg').innerText = CSC[2][1].toFixed(4);
+            document.getElementById('out_bb').innerText = CSC[2][2].toFixed(4);
+
+        } catch (e) {
+            errBox.classList.remove('hidden');
+        }
+    }
+
+    // 初始載入時計算一次
+    window.onload = calculateCSC;
+</script>
+</body>
+</html>
